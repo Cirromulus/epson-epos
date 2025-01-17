@@ -37,7 +37,9 @@ int main(int argc, char* argv[])
         send(sock, buf, strnlen(buf, sizeof(buf)), 0);
     }
     
-    char cutPaper[] = {'\n', '\n', 27, '@', 29, 'V', 48};
+    char feedForCut[] = "\n\n\n\n";
+    char cutPaper[] = {27, '@', 29, 'V', '0'};
+    send(sock, feedForCut, sizeof(feedForCut), 0);
     send(sock, cutPaper, sizeof(cutPaper), 0);
     
 	/* close socket */
