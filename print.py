@@ -107,7 +107,7 @@ class Printer():
 
         def print(self):
             maxWidthRight = max([len(right) for (_, right) in self.items])
-            self.printer.setHorizontalTabPos(maxWidthRight)
+            self.printer.setHorizontalTabPos(Printer.WIDTH - maxWidthRight)
             for (left, right) in self.items:
                 self.printer.println(Just.LEFT, Emph.ON, left, Emph.OFF, Tab,
                                         right.rjust(maxWidthRight))
@@ -160,7 +160,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     list.addItem("Rönnies linke Hand", "Gicht")
     list.addItem("Rönnies rechte Hand", "Sehr klein")
     list.addItem("Rönnies Mittelfinger", "dreifach")
-    list.addItem("Körperhöhe", str(round(random()*1.5, 2)) + 'm')
+    list.addItem("Körperhöhe", str(round(random()*1.5 + .2, 2)) + 'm')
+    list.addItem("Gewicht", "irrelevant")
     list.print()
 
     # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
