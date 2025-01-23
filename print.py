@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import socket
 
 HOST = "192.168.0.250"
@@ -46,27 +48,50 @@ class Cut:
     def FEED_CUT_REVERSE(self):
         return self.BASE + chr(103 + self.less) + chr(self.feed)
 
-class CodeTable:
-    BASE = escape + 't'
+defaultCut = Cut(feed=5, less=False)
 
-    SET_NORDIC = BASE + chr(5)
-    nordic = 'cp865'
+class Underline:
+    BASE = escape + '-'
 
+    NONE = BASE + chr(0)
+    ONE = BASE + chr(1)
+    TWO = BASE + chr(2)
 
-    ä = chr(0x84)
+class DoubleStrike:
+    _BASE = escape + 'G'
+    ON = _BASE + chr(1)
+    OFF = _BASE + chr(0)
 
+class Emph:
+    _BASE = escape + 'E'
+    ON = _BASE + chr(1)
+    OFF = _BASE + chr(0)
 
-defaultCut = Cut(4, False)
+class Just:
+    _BASE = escape + 'a'
+    LEFT = _BASE + chr(0)
+    CENTER = _BASE + chr(1)
+    RIGHT = _BASE + chr(2)
 
-class Socket():
+class Printer():
+    WIDTH = 56
+
+    class CodeTable:
+        BASE = escape + 't'
+        SET_NORDIC = BASE + chr(5)
+        nordic = 'cp865'
+
     def __init__(self, socket):
         self.socket = socket
         self.encoding = 'ascii'
 
     def setCodePage(self):
         # todo: actual parameter
-        print(CodeTable.SET_NORDIC)
-        self.encoding = CodeTable.nordic
+        print(Printer.CodeTable.SET_NORDIC)
+        self.encoding = Printer.CodeTable.nordic
+
+    def resetFormatting(self):
+        print(escape + '@')
 
     def print(self, *argv):
         print (argv)
@@ -76,14 +101,29 @@ class Socket():
     def println(self, *argv):
         self.print(*argv, "\r\n")
 
+
+
+
+from datetime import datetime
+
+# datetime object containing current date and time
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
-    p = Socket(s)
+    p = Printer(s)
+    p.resetFormatting()
     p.setCodePage()
     p.print(defaultFeed)
     p.println(BIGFONT, "ICH SAGE ES MAL GANZ DEUTLICH...")
-    p.println(SMALLFONT, "Ronny hat kleine Hände")
+    p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
     p.print(defaultFeed)
-    p.println(SMALLFONT, "... und darauf ist er auch noch stolz")
-    p.print(defaultCut.FEED_CUT(), defaultFeed)
+    p.println(SMALLFONT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE)
+    p.println(Printer.WIDTH * "─")
+    p.println(Just.CENTER, now, Just.LEFT)
+    # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
+    # p.println(Emph.ON, "emph", Emph.OFF)
+
+    p.print(defaultCut.FEED_CUT())
     s.close()
