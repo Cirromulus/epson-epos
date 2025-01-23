@@ -22,15 +22,6 @@ class Font:
 SMALLFONT = Font.FONT_B
 BIGFONT = Font.FONT_A
 
-class Feed:
-    def __init__(self, lines = 1):
-        self.lines = lines
-
-    def feed(self):
-        return escape + 'J' + chr(self.lines)
-
-defaultFeed = Feed(2).feed()
-
 class Cut:
     BASE = group + 'V'
 
@@ -73,6 +64,8 @@ class Just:
     CENTER = _BASE + chr(1)
     RIGHT = _BASE + chr(2)
 
+Tab = chr(9)
+
 class Printer():
     WIDTH = 56
 
@@ -83,15 +76,35 @@ class Printer():
 
     def __init__(self, socket):
         self.socket = socket
-        self.encoding = 'ascii'
+        self.encoding = 'cp437' # is default encoding
+        self.setCodePage()  # this also allows high/low characters
+
+    def setHorizontalTabPos(self, pos, tabId = 0):
+        _BASE = escape + 'D'
+        self.print(_BASE + chr(pos) + chr(tabId))
 
     def setCodePage(self):
         # todo: actual parameter
-        print(Printer.CodeTable.SET_NORDIC)
+        self.print(Printer.CodeTable.SET_NORDIC)
         self.encoding = Printer.CodeTable.nordic
 
     def resetFormatting(self):
-        print(escape + '@')
+        self.print(escape + '@')
+        # 1 inch / 180 ... 0.1xx mm
+        self.print(group + "P" + chr(180) + chr(180))
+
+    # TODO: Make list be an object to calculate stuff
+    def pinkyPromiseMaxWidthRight(self, width):
+        self.rightMaxWidth = width
+        self.setHorizontalTabPos(Printer.WIDTH - width)
+
+    def listElement(self, nameleft, thingright):
+        self.println(Just.LEFT, Emph.ON, nameleft, Emph.OFF, Tab, thingright.rjust(self.rightMaxWidth))
+
+    # END TODO
+
+    def feed(self, times = 1, motionUnits = 20):
+        self.print(escape + 'J' + chr(times * motionUnits))
 
     def print(self, *argv):
         print (argv)
@@ -99,9 +112,21 @@ class Printer():
             self.socket.sendall(string.encode(self.encoding))
 
     def println(self, *argv):
-        self.print(*argv, "\r\n")
+        self.print(*argv, "\n")
 
 
+class Barcode:
+    JAN8 = 2
+    CODE39 = 4  # d = 48 – 57, 65 – 90, 32, 36, 37, 42, 43, 45, 46, 47
+
+    def Setup(height=50):
+        setHeight = group + 'h' + chr(height)
+        setHriCharacterPos = group + 'H' + chr(2)   # 2: Below
+        setHriCharacterFont = group + 'f' + chr(1) # font B
+        return setHeight + setHriCharacterPos + setHriCharacterFont
+
+    def send(data):
+        return group + 'k' + chr(Barcode.CODE39) + data + chr(0)
 
 
 from datetime import datetime
@@ -109,21 +134,30 @@ from datetime import datetime
 # datetime object containing current date and time
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
-    p.resetFormatting()
     p.setCodePage()
-    p.print(defaultFeed)
-    p.println(BIGFONT, "ICH SAGE ES MAL GANZ DEUTLICH...")
-    p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
-    p.print(defaultFeed)
-    p.println(SMALLFONT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE)
+    p.feed()
+    p.println(BIGFONT, Just.CENTER, "ABRECHNUNG RONNFRIED")
+    p.println(SMALLFONT, now, Just.LEFT)
+    p.feed()
+    # TODO: Actually calculate that from a table beforehand
+    p.pinkyPromiseMaxWidthRight(10)
+    p.listElement("Rönnies linke Hand", "Gicht")
+    p.listElement("Rönnies rechte Hand", "Sehr klein")
+    p.listElement("Rönnies Mittelfinger", "dreifach")
+    p.listElement("Körperhöhe", "Djent")
+    # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
     p.println(Printer.WIDTH * "─")
-    p.println(Just.CENTER, now, Just.LEFT)
+    p.println(Just.RIGHT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE, " ", Just.LEFT)
     # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
     # p.println(Emph.ON, "emph", Emph.OFF)
 
+    p.feed(times= 2)
+
+    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("ASSMASTER"))
+
+    p.feed(times= 2)
     p.print(defaultCut.FEED_CUT())
     s.close()
