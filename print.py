@@ -79,9 +79,13 @@ class Printer():
         self.encoding = 'cp437' # is default encoding
         self.setCodePage()  # this also allows high/low characters
 
-    def setHorizontalTabPos(self, pos, tabId = 0):
+    def setHorizontalTabPos(self, *pos):
         _BASE = escape + 'D'
-        self.print(_BASE + chr(pos) + chr(tabId))
+
+        tosend =_BASE
+        for p in pos:
+            tosend = tosend + chr(p)
+        self.print(tosend + chr(0))
 
     def setCodePage(self):
         # todo: actual parameter
@@ -93,15 +97,23 @@ class Printer():
         # 1 inch / 180 ... 0.1xx mm
         self.print(group + "P" + chr(180) + chr(180))
 
-    # TODO: Make list be an object to calculate stuff
-    def pinkyPromiseMaxWidthRight(self, width):
-        self.rightMaxWidth = width
-        self.setHorizontalTabPos(Printer.WIDTH - width)
+    class List:
+        def __init__(self, printer):
+            self.items = []
+            self.printer = printer
 
-    def listElement(self, nameleft, thingright):
-        self.println(Just.LEFT, Emph.ON, nameleft, Emph.OFF, Tab, thingright.rjust(self.rightMaxWidth))
+        def addItem(self, nameleft, thingright):
+            self.items.append([nameleft, thingright])
 
-    # END TODO
+        def print(self):
+            maxWidthRight = max([len(right) for (_, right) in self.items])
+            self.printer.setHorizontalTabPos(maxWidthRight)
+            for (left, right) in self.items:
+                self.printer.println(Just.LEFT, Emph.ON, left, Emph.OFF, Tab,
+                                        right.rjust(maxWidthRight))
+
+    def newList(self):
+        return Printer.List(self)
 
     def feed(self, times = 1, motionUnits = 20):
         self.print(escape + 'J' + chr(times * motionUnits))
@@ -130,6 +142,7 @@ class Barcode:
 
 
 from datetime import datetime
+from random import random
 
 # datetime object containing current date and time
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -142,12 +155,14 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     p.println(BIGFONT, Just.CENTER, "ABRECHNUNG RONNFRIED")
     p.println(SMALLFONT, now, Just.LEFT)
     p.feed()
-    # TODO: Actually calculate that from a table beforehand
-    p.pinkyPromiseMaxWidthRight(10)
-    p.listElement("Rönnies linke Hand", "Gicht")
-    p.listElement("Rönnies rechte Hand", "Sehr klein")
-    p.listElement("Rönnies Mittelfinger", "dreifach")
-    p.listElement("Körperhöhe", "Djent")
+
+    list = p.newList()
+    list.addItem("Rönnies linke Hand", "Gicht")
+    list.addItem("Rönnies rechte Hand", "Sehr klein")
+    list.addItem("Rönnies Mittelfinger", "dreifach")
+    list.addItem("Körperhöhe", str(round(random()*1.5, 2)) + 'm')
+    list.print()
+
     # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
     p.println(Printer.WIDTH * "─")
     p.println(Just.RIGHT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE, " ", Just.LEFT)
