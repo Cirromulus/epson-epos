@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from PIL import Image # todo: somewhere else
 import socket
 
 HOST = "192.168.0.250"
@@ -66,6 +67,10 @@ class Just:
 
 Tab = chr(9)
 
+
+def Unidirectional(on = True):
+    return escape + "U" + chr(1 if on else 0)
+
 class Printer():
     WIDTH = 56
 
@@ -115,6 +120,64 @@ class Printer():
     def newList(self):
         return Printer.List(self)
 
+    TM_T88IV_max_horizontal_dots = 250 # 2047 # is this even correct?
+
+    class Image():
+        def __init__(self, imagepath = "drei.png", desired_width_ratio = .9):
+            desired_width = int(Printer.TM_T88IV_max_horizontal_dots * desired_width_ratio)
+            print (f"Image: Opening {imagepath}")
+            img = Image.open(imagepath) # open colour image
+            wpercent = (desired_width / float(img.size[0]))
+            hsize = int((float(img.size[1]) * float(wpercent)))
+            scaled_size = (desired_width, hsize)
+            print (f"Image: Scaling from {img.size} to {scaled_size}")
+            img = img.resize(scaled_size, Image.Resampling.LANCZOS)
+            img = img.convert('1') # convert image to black and white
+            self.img = img
+            self.img.save('intended_image.png')
+
+    def printImage(self, image : Image):
+        # ASCII ESC * m nL nH d1 ... dk
+
+        BASE = escape + '*'
+        DD_8 = 1  # "double density"
+        DD_24 = 33  # "double density"
+
+
+        # When printing multiple line bit images, selecting unidirectional print mode
+        # with ESC U enables printing patterns in which the top and bottom parts are
+        # aligned vertically.
+        self.print(Just.CENTER)
+        self.print(Unidirectional(True))
+        num_horizontal_dots = image.img.size[0]
+        num_vertical_dots = image.img.size[1]
+        # if num_horizontal_dots > TM_T88IV_max_horizontal_dots:
+        #     print (num_horizontal_dots, " > ", TM_T88IV_max_horizontal_dots)
+        # "big endian"
+        num_dots_serialized = bytes([num_horizontal_dots % 256, int(num_horizontal_dots / 256)])
+
+        dotsperline = 8 # relying on "DD_8"
+        base_y = 0
+        while base_y < num_vertical_dots:
+            data = bytearray()
+            for x in range(num_horizontal_dots):
+                boyt = 0
+                for offs_y in range(min(num_vertical_dots - base_y, dotsperline)):
+                    px = image.img.getpixel((x, base_y + offs_y))
+                    # print (f"pixul: {px}")
+                    px = 1 - min(px, 1)
+                    # print (f"pixul: {px}")
+                    boyt = boyt + (px << ((dotsperline - 1) - offs_y))
+                    print (f"x= {x}, offs_y={offs_y}-> bit {px} boyt {boyt}")
+                data.append(boyt)
+                # print (f"byte {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
+            base_y += dotsperline
+            print (f"sending image row {base_y / dotsperline} of {num_vertical_dots}")
+            print (data)
+            self.send(BASE.encode(self.encoding), bytes(DD_8), num_dots_serialized, data)
+            self.print('\n')
+        self.print(Unidirectional(False))
+
     def feed(self, times = 1, motionUnits = 20):
         self.print(escape + 'J' + chr(times * motionUnits))
 
@@ -122,6 +185,11 @@ class Printer():
         print (argv)
         for string in argv:
             self.socket.sendall(string.encode(self.encoding))
+
+    def send(self, *argv):
+        for binary in argv:
+            print (f"send({len(binary)})")
+            self.socket.sendall(binary)
 
     def println(self, *argv):
         self.print(*argv, "\n")
@@ -140,7 +208,6 @@ class Barcode:
     def send(data):
         return group + 'k' + chr(Barcode.CODE39) + data + chr(0)
 
-
 from datetime import datetime
 from random import random
 
@@ -152,28 +219,31 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     p = Printer(s)
     p.setCodePage()
     p.feed()
-    p.println(BIGFONT, Just.CENTER, "ABRECHNUNG RONNFRIED")
-    p.println(SMALLFONT, now, Just.LEFT)
+
+    p.printImage(Printer.Image())
+
+    # p.println(BIGFONT, Just.CENTER, "ABRECHNUNG RONNFRIED")
+    # p.println(SMALLFONT, now, Just.LEFT)
     p.feed()
 
-    list = p.newList()
-    list.addItem("Rönnies linke Hand", "Gicht")
-    list.addItem("Rönnies rechte Hand", "Sehr klein")
-    list.addItem("Rönnies Mittelfinger", "dreifach")
-    list.addItem("Körperhöhe", str(round(random()*1.5 + .2, 2)) + 'm')
-    list.addItem("Gewicht", "irrelevant")
-    list.print()
+    # list = p.newList()
+    # list.addItem("Rönnies linke Hand", "Gicht")
+    # list.addItem("Rönnies rechte Hand", "Sehr klein")
+    # list.addItem("Rönnies Mittelfinger", "dreifach")
+    # list.addItem("Körperhöhe", str(round(random()*1.5 + .2, 2)) + 'm')
+    # list.addItem("Gewicht", "irrelevant")
+    # list.print()
 
-    # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
-    p.println(Printer.WIDTH * "─")
-    p.println(Just.RIGHT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE, " ", Just.LEFT)
-    # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
-    # p.println(Emph.ON, "emph", Emph.OFF)
+    # # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
+    # p.println(Printer.WIDTH * "─")
+    # p.println(Just.RIGHT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE, " ", Just.LEFT)
+    # # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
+    # # p.println(Emph.ON, "emph", Emph.OFF)
 
-    p.feed(times= 2)
+    # p.feed(times= 2)
 
-    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("ASSMASTER"))
+    # p.print(Just.CENTER, Barcode.Setup() + Barcode.send("ASSMASTER"))
 
-    p.feed(times= 2)
+    # p.feed(times= 2)
     p.print(defaultCut.FEED_CUT())
     s.close()
