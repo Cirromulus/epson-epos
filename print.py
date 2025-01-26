@@ -326,13 +326,20 @@ class Barcode:
     def send(data):
         return group + 'k' + chr(Barcode.CODE39) + data + chr(0)
 
+# ========================================
+# actual user-code:
+# ========================================
+
 from datetime import datetime
 from random import random
 
 # datetime object containing current date and time
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-an_img = Printer.Image("lil_bits.png", resolution=Printer.Image.DD_8)
+an_img = Printer.Image("cat.png")
+other_img = Printer.Image("cat_2.png")
+
+lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
@@ -350,6 +357,12 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     p.feed()
     p.resetFormatting()
     p.printImage(an_img)
+
+    p.feed()
+    p.println(lorem)
+    p.feed(times=2)
+
+    p.printImage(other_img)
 
     # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
     # p.feed()
@@ -385,8 +398,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # # p.println(Emph.ON, "emph", Emph.OFF)
 
 
-    # p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
+    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
+    p.feed(times= 2)
 
-    # p.feed(times= 2)
     p.print(defaultCut.FEED_CUT())
     s.close()
