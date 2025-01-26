@@ -7,6 +7,17 @@ import os.path
 HOST = "192.168.0.250"
 PORT = 9100  # The port used by the server
 
+MM_PER_INCH = 25.4
+INCH_PER_MM = 1 / MM_PER_INCH
+
+def bigEndian(value, width_bytes = 2):
+    bytes = bytearray()
+    for byte in range(width_bytes):
+        low = value & 0xFF
+        bytes.append(low)
+        value >>= 8
+    return bytes
+
 group = chr(0x1D)
 escape = chr(0x1B)
 
@@ -82,8 +93,12 @@ class Printer():
 
     configuredPaper = WIDEPAPER
 
+    # TM-T88IV
+    DEFAULT_MOTION_UNIT = (180, 360)
+
     def getMaxCharacterWidth(font = SMALLFONT):
-        assert(Printer.configuredPaper == Printer.WIDEPAPER, "hardcoded currently")
+        # "hardcoded currently"
+        assert(Printer.configuredPaper == Printer.WIDEPAPER)
 
         if font == SMALLFONT:
             return 56
@@ -99,6 +114,7 @@ class Printer():
         self.socket = socket
         self.encoding = 'cp437' # is default encoding
         self.setCodePage()  # this also allows high/low characters
+        self.currentMotionUnit = Printer.DEFAULT_MOTION_UNIT
 
     def setHorizontalTabPos(self, *pos):
         _BASE = escape + 'D'
@@ -115,9 +131,18 @@ class Printer():
 
     def resetFormatting(self):
         self.print(escape + '@')
-        # 1 inch / 180 ... 0.1xx mm
-        # self.send(bytes([ord(group), ord("P"), 180, 180]))
 
+    def getCurrentMotionUnitPerMM(self):
+        units_per_mm = [m / MM_PER_INCH for m in self.currentMotionUnit]
+        print(f"current units_per_mm: {units_per_mm}")
+        return units_per_mm
+
+    def setMotionUnit(self, mm_per_unit = .125):
+        desired_units_per_inch = int(MM_PER_INCH / mm_per_unit)
+        assert(desired_units_per_inch <= 256)
+        self.currentMotionUnit = (desired_units_per_inch, desired_units_per_inch)
+        print (f"set current motion unit: {self.currentMotionUnit} (1 inch / x)")
+        self.send(bytes([ord(group), ord("P"), desired_units_per_inch, desired_units_per_inch]))
 
 
     class List:
@@ -142,11 +167,47 @@ class Printer():
     def newList(self, *args, **kwargs):
         return Printer.List(self, *args, **kwargs)
 
-    def setPageMode(self, on = True):
-        if on:
-            self.send(bytes([escape, 'L']))
-        else:
-            self.send(bytes(FeedForward))
+
+    class PageMode:
+        def __init__(self, printer):
+            self.printer = printer
+
+        def setPageMode(self):
+            self.printer.print(escape + 'L')
+
+        def finalizePrint(self):
+            self.printer.print(FeedForward)
+
+        class Direction:
+            upperLeft = 0 # Left to right
+            lowerLeft = 1 # bottom to top
+            lowerRight = 2 # right to left
+            upperRight = 3 # top to bottom
+
+        def setDirection(self, direction : Direction):
+            self.printer.print(escape + 'T' + chr(direction))
+
+        def advanceWriteBuffer(self, mm):
+            needed_units = round(mm * self.printer.getCurrentMotionUnitPerMM()[1])
+            print (f"forwarding {mm}mm -> {needed_units} units")
+            self.printer.feed(motionUnits = int(needed_units))
+
+
+    def setupPage(self, size_hor, size_vert, origin_x = 0, origin_y = 0, resolution = .125) -> PageMode:
+        #The maximum print area height that can be set differs according to the printing control
+        # (single color / two-color) setting.
+        # Refer to GS ( E   <Function 5> for specifying printing control (single-color / two-color).
+        # When single-color printing control is selected: 234.53 mm {3324/360 inches}
+
+        # TODO: Perhaps have given parameters in mm and not in "units"
+        page = Printer.PageMode(self)
+        page.setPageMode()
+        self.mmPerUnit = resolution
+        self.setMotionUnit(resolution)
+        print (f"Setting up page at {origin_x}:{origin_y} {size_hor}x{size_vert} (motion units)")
+
+        self.send(bytes([ord(escape), ord('W')]), bigEndian(int(origin_x)), bigEndian(int(origin_y)), bigEndian(int(size_hor)), bigEndian(int(size_vert)))
+        return page
 
     class Image:
         class Resolution:
@@ -163,13 +224,13 @@ class Printer():
         # Hardcoded to 80mm paper currently
         # also, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/esc_asterisk.html
         # seems to be incorrect (half DPI than said!?)
-        # SD seems to not work, but DD code "1" works with SD resolution.?!
+        # Currently only DD_8 code "1" works, but with SD resolution.?!
         # class Official:
         #     SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
         #     DD_8 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=60, bits_per_line=8, code=1)
         #     SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
         #     DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
-        # SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
+        SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
         DD_8 = Resolution(hor_dpi=180/2, max_hor_dots=512/2, vert_dpi=60, bits_per_line=8, code=1)
         SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
         DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
@@ -197,17 +258,26 @@ class Printer():
 
         BASE = escape + '*'
 
-        # When printing multiple line bit images, selecting unidirectional print mode
-        # with ESC U enables printing patterns in which the top and bottom parts are
-        # aligned vertically.
-        self.print(Just.CENTER)
-        self.print(Unidirectional(True))
         num_horizontal_dots = image.img.size[0]
         num_vertical_dots = image.img.size[1]
         # if num_horizontal_dots > TM_T88IV_max_horizontal_dots:
         #     print (num_horizontal_dots, " > ", TM_T88IV_max_horizontal_dots)
         # "big endian"
-        num_dots_serialized = bytes([num_horizontal_dots % 256, int(num_horizontal_dots / 256)])
+
+        # "When printing multiple line bit images, selecting unidirectional print mode
+        # with ESC U enables printing patterns in which the top and bottom parts are
+        # aligned vertically." [But I think that is incorrect]
+        # self.print(Unidirectional(True))
+
+        # setup "page mode"
+        mm_per_unit = 0.125
+        printable_area = Printer.configuredPaper.width # guess
+        hor_size = printable_area / mm_per_unit
+        vert_size = num_vertical_dots / (image.resolution.vert_dpi / MM_PER_INCH) / mm_per_unit
+        page = p.setupPage(size_hor=hor_size, size_vert=vert_size, resolution=mm_per_unit)
+        page.setDirection(Printer.PageMode.Direction.upperLeft)
+
+        mm_per_line = (image.resolution.bits_per_line / image.resolution.vert_dpi) * MM_PER_INCH
 
         base_y = 0
         while base_y < num_vertical_dots:
@@ -217,22 +287,25 @@ class Printer():
                 for offs_y in range(min(num_vertical_dots - base_y, image.resolution.bits_per_line)):
                     byteoffs = offs_y % 8
                     coord = (x, base_y + offs_y)
-                    px = image.img.getpixel(coord)
-                    # print (f"pixul: {px}")
-                    px = 1 - min(px, 1)
-                    # print (f"pixul: {px}")
-                    boyt = boyt + (px << ((8-1) - byteoffs))
-                    print (f"coord= {coord}, offs_y={offs_y}-> bit {px} boyt {boyt}")
+                    px = (~image.img.getpixel(coord)) & 1
+                    boyt |= px << ((8-1) - byteoffs)
+                    # print (f"coord= {coord}, offs_y={offs_y} ({byteoffs})-> bit {px} boyt {boyt}")
                     if byteoffs == 8 - 1:
-                        print (f"dotgroup {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
+                        # print (f"dotgroup {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
                         data.append(boyt)
             base_y += image.resolution.bits_per_line
-            print (f"sending image row {base_y / image.resolution.bits_per_line} of {num_vertical_dots / image.resolution.bits_per_line}")
+            current_row_nr = int(base_y / image.resolution.bits_per_line)
+            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line}")
             print (data)
-            self.send(BASE.encode(self.encoding), bytes(image.resolution.code), num_dots_serialized, data)
+            self.send(BASE.encode(self.encoding), bytes(image.resolution.code), bigEndian(num_horizontal_dots, width_bytes=2), data)
+            page.advanceWriteBuffer(mm_per_line)
+
+        page.finalizePrint()
         self.resetFormatting()
 
-    def feed(self, times = 1, motionUnits = 20):
+    def feed(self, times = 1, motionUnits = None):
+        if not motionUnits:
+            motionUnits = int(self.getCurrentMotionUnitPerMM()[1])
         self.print(escape + 'J' + chr(times * motionUnits))
 
     def print(self, *argv):
@@ -270,13 +343,14 @@ now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # now = '2025-01-26 00:01:15'
 
 
-gang_img = Printer.Image("drei.png", resolution=Printer.Image.DD_24)
+gang_img = Printer.Image("drei.png", resolution=Printer.Image.DD_8)
 
 # import sys; sys.exit(1)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
+
     p.feed()
 
     # p.feed(times=2)
