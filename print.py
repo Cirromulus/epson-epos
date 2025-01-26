@@ -138,12 +138,11 @@ class Printer():
         return units_per_mm
 
     def setMotionUnit(self, mm_per_unit = .125):
-        desired_units_per_inch = int(MM_PER_INCH / mm_per_unit)
+        desired_units_per_inch = int(round(MM_PER_INCH / mm_per_unit))
         assert(desired_units_per_inch <= 256)
         self.currentMotionUnit = (desired_units_per_inch, desired_units_per_inch)
         print (f"set current motion unit: {self.currentMotionUnit} (1 inch / x)")
         self.send(bytes([ord(group), ord("P"), desired_units_per_inch, desired_units_per_inch]))
-
 
     class List:
         def __init__(self, printer, font = BIGFONT):
@@ -167,7 +166,6 @@ class Printer():
     def newList(self, *args, **kwargs):
         return Printer.List(self, *args, **kwargs)
 
-
     class PageMode:
         def __init__(self, printer):
             self.printer = printer
@@ -190,7 +188,7 @@ class Printer():
         def advanceWriteBuffer(self, mm):
             needed_units = round(mm * self.printer.getCurrentMotionUnitPerMM()[1])
             print (f"forwarding {mm}mm -> {needed_units} units")
-            self.printer.feed(motionUnits = int(needed_units))
+            self.printer.feed(motionUnits = needed_units)
 
 
     def setupPage(self, size_hor, size_vert, origin_x = 0, origin_y = 0, resolution = .125) -> PageMode:
@@ -277,7 +275,9 @@ class Printer():
         page = p.setupPage(size_hor=hor_size, size_vert=vert_size, resolution=mm_per_unit)
         page.setDirection(Printer.PageMode.Direction.upperLeft)
 
-        mm_per_line = (image.resolution.bits_per_line / image.resolution.vert_dpi) * MM_PER_INCH
+        # ugly addition thing that is probably a rounding error
+        ugly_correction = 2 * mm_per_unit
+        mm_per_line = ((image.resolution.bits_per_line + ugly_correction) / image.resolution.vert_dpi) * MM_PER_INCH
 
         base_y = 0
         while base_y < num_vertical_dots:
@@ -305,8 +305,8 @@ class Printer():
 
     def feed(self, times = 1, motionUnits = None):
         if not motionUnits:
-            motionUnits = int(self.getCurrentMotionUnitPerMM()[1])
-        self.print(escape + 'J' + chr(times * motionUnits))
+            motionUnits = self.getCurrentMotionUnitPerMM()[1]
+        self.print(escape + 'J' + chr(int(round(times * motionUnits))))
 
     def print(self, *argv):
         print (argv)
