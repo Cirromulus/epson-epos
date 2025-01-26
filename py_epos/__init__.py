@@ -21,3 +21,5 @@ def printImage():
         p.feed()
         p.printImage(img)
         p.cut()
+
+# TODO: interactive!

@@ -203,6 +203,23 @@ class Printer():
         return page
 
     class Image:
+
+        #thang @ https://stackoverflow.com/questions/43864101/python-pil-check-if-image-is-transparent
+        def has_transparency(img : PIL.Image):
+            if img.info.get("transparency", None) is not None:
+                return True
+            if img.mode == "P":
+                transparent = img.info.get("transparency", -1)
+                for _, index in img.getcolors():
+                    if index == transparent:
+                        return True
+            elif img.mode == "RGBA":
+                extrema = img.getextrema()
+                if extrema[3][0] < 255:
+                    return True
+
+            return False
+
         class Resolution:
             def __init__(self, hor_dpi, max_hor_dots, vert_dpi, bits_per_line, code):
                 self.hor_dpi = hor_dpi
@@ -238,6 +255,13 @@ class Printer():
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             print (f"Image: Opening {imagepath}")
             img = PIL.Image.open(imagepath) # open colour image
+
+            if Printer.Image.has_transparency(img):
+                print (f"Image has transparency. Replacing that with white.")
+                white_bg = PIL.Image.new("RGBA", img.size, "WHITE") # Create a white rgba background
+                white_bg.paste(img, (0, 0), img)
+                img = white_bg
+
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
             scaled_size = (desired_width, hsize)
