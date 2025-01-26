@@ -1,11 +1,7 @@
 #!/usr/bin/python3
 
-import PIL.Image # todo: somewhere else
-import socket
+import PIL.Image
 import os.path
-
-HOST = "192.168.0.250"
-PORT = 9100  # The port used by the server
 
 MM_PER_INCH = 25.4
 INCH_PER_MM = 1 / MM_PER_INCH
@@ -21,7 +17,6 @@ def bigEndian(value, width_bytes = 2):
 group = chr(0x1D)
 escape = chr(0x1B)
 
-# seems not to work
 _emph = escape + 'E'
 EMPH_OFF = _emph + chr(0)
 EMPH_ON = _emph + chr(1)
@@ -234,7 +229,11 @@ class Printer():
         DD_24 = Resolution(hor_dpi=180, max_hor_dots=512/2, vert_dpi=180, bits_per_line=24, code=33)
 
 
-        def __init__(self, imagepath, resolution : Resolution = DD_8, desired_width_ratio = 1):
+        def __init__(self,
+                     imagepath : str,
+                     resolution : Resolution = DD_8,
+                     desired_width_ratio = 1,
+                     export_generated_image = False):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             print (f"Image: Opening {imagepath}")
@@ -247,7 +246,8 @@ class Printer():
             img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
             img = img.convert('1') # convert image to black and white
             self.name = os.path.basename(imagepath)
-            img.save(f'intended_image_{self.name}.png')
+            if export_generated_image:
+                img.save(f'intended_image_{self.name}.png')
 
             self.resolution = resolution
             self.img = img
@@ -299,6 +299,9 @@ class Printer():
 
         self.print(escape + 'J' + chr(int(round(times * actual_motion_units))))
 
+    def cut(self, type = defaultCut.FEED_CUT()):
+        self.print(type)
+
     def print(self, *argv):
         print (argv)
         for string in argv:
@@ -325,81 +328,3 @@ class Barcode:
 
     def send(data):
         return group + 'k' + chr(Barcode.CODE39) + data + chr(0)
-
-# ========================================
-# actual user-code:
-# ========================================
-
-from datetime import datetime
-from random import random
-
-# datetime object containing current date and time
-now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-an_img = Printer.Image("cat.png")
-other_img = Printer.Image("cat_2.png")
-
-lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    p = Printer(s)
-
-    # p.feed(times=2)
-    # p.print(Just.CENTER)
-    # p.println(BIGFONT, "Geburtstagsgrüße")
-    # p.println(BIGFONT, "RIEBE / PIEPER")
-    # p.feed()
-    p.println(SMALLFONT, Just.CENTER, now)
-    p.println(BIGFONT, an_img.name)
-    p.feed()
-    p.println(SMALLFONT, str(an_img.resolution))
-    p.feed()
-    p.resetFormatting()
-    p.printImage(an_img)
-
-    p.feed()
-    p.println(lorem)
-    p.feed(times=2)
-
-    p.printImage(other_img)
-
-    # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
-    # p.feed()
-
-    # list = p.newList(BIGFONT)
-    # list.addItem("Name", "Name Vorname")
-    # list.addItem("Alter", "31")
-    # list.addItem("Lieblingsfarbe", "Musik")
-    # list.addItem("Nasenlöcher", "2")
-    # list.addItem("Fernbedienungdinger", "0")
-    # list.addItem("Schenkung", "Jetzt")
-    # list.print()
-
-    # p.feed(times=2)
-    # p.print(SMALLFONT)
-    # p.println("Lieber Name,")
-    # p.feed()
-    # p.println("Bla.")
-    # p.feed()
-    # p.println("Bla")
-
-    # p.feed(times=2)
-
-    # p.println("Es bediente Sie")
-    # p.feed()
-    # p.println("Freund 1 / Freund 2")
-
-
-    # # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
-    # p.println(Printer.WIDTH * "─")
-    # p.println(Just.RIGHT, "... und darauf ist er auch noch ", Underline.TWO, "stolz", Underline.NONE, " ", Just.LEFT)
-    # # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
-    # # p.println(Emph.ON, "emph", Emph.OFF)
-
-
-    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
-    p.feed(times= 2)
-
-    p.print(defaultCut.FEED_CUT())
-    s.close()

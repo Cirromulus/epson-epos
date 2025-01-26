@@ -1,1 +1,5 @@
 *.png
+build/
+.eggs/
+py_epos.egg-info/
+__pycache__
