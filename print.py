@@ -72,8 +72,12 @@ def Unidirectional(on = True):
     return escape + "U" + chr(1 if on else 0)
 
 class Printer():
-    WIDTH = 56
-    WIDTH_BIGFONT = 42
+
+    def getMaxCharacterWidth(font = SMALLFONT):
+        if font == SMALLFONT:
+            return 56
+        elif font == BIGFONT:
+            return 42
 
     class CodeTable:
         BASE = escape + 't'
@@ -106,25 +110,26 @@ class Printer():
 
 
     class List:
-        def __init__(self, printer):
+        def __init__(self, printer, font = BIGFONT):
             self.items = []
             self.printer = printer
+            self.font = font
 
         def addItem(self, nameleft, thingright):
             self.items.append([nameleft, thingright])
 
         def print(self):
-            # TODO: Font selectabse
-            self.printer.print(BIGFONT)
-            width = Printer.WIDTH_BIGFONT
+            self.printer.print(escape + '@')    # reset existing formatting
+            self.printer.print(self.font)
+            width = Printer.getMaxCharacterWidth(self.font)
             maxWidthRight = max([len(right) for (_, right) in self.items])
             self.printer.setHorizontalTabPos(width - maxWidthRight)
             for (left, right) in self.items:
                 self.printer.println(Just.LEFT, Emph.ON, left, Emph.OFF, Tab,
                                         right.rjust(maxWidthRight))
 
-    def newList(self):
-        return Printer.List(self)
+    def newList(self, *args, **kwargs):
+        return Printer.List(self, *args, **kwargs)
 
     def setPageMode(self, on = True):
         if on:
@@ -225,30 +230,29 @@ from datetime import datetime
 from random import random
 
 # datetime object containing current date and time
-# now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-now = '2025-01-26 00:01:15'
+now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# now = '2025-01-26 00:01:15'
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
-    p.setCodePage()
-    p.feed()
+    # p.feed()
 
-    p.printImage(Printer.Image())
+    # p.printImage(Printer.Image())
 
-    p.feed(times=2)
-    p.print(Just.CENTER)
-    p.println(BIGFONT, "Geburtstagsgrüße")
-    p.println(BIGFONT, "RIEBE / PIEPER")
-    p.feed()
-    p.println(SMALLFONT, now)
-    p.feed(times=2)
-    p.resetFormatting()
+    # p.feed(times=2)
+    # p.print(Just.CENTER)
+    # p.println(BIGFONT, "Geburtstagsgrüße")
+    # p.println(BIGFONT, "RIEBE / PIEPER")
+    # p.feed()
+    p.println(SMALLFONT, Just.CENTER, now)
+    # p.feed(times=2)
+    # p.resetFormatting()
 
-    p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
-    p.feed()
+    # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
+    # p.feed()
 
-    list = p.newList()
+    list = p.newList(BIGFONT)
     list.addItem("Name", "Lukas Bertram")
     list.addItem("Alter", "31")
     list.addItem("Lieblingsfarbe", "Musik")
@@ -257,30 +261,39 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     list.addItem("Schenkung", "Jetzt")
     list.print()
 
-    p.feed(times=2)
-    p.print(SMALLFONT)
-    p.println("Lieber Lukas,")
-    p.feed(motionUnits=5)
-    p.println("wir blicken auf viele musikalische Erfahrung zurück.")
-    p.println("Neben Gitarrenklängen gibt es vor allem ein Geräusch,")
-    p.println("das wir im Studio mit dir verbinden: ", EMPH_ON, '"RACKLACKGGG!!"', EMPH_OFF)
-    p.println("... wenn mal wieder eine Aufnahme einen fehler hatte,")
-    p.println("und wie du die mittlerweile im Muskelgedächnis")
-    p.println("eingebettete Kombination für ")
-    p.println('"Aufnahme beenden, Audiospuren löschen, dankeok"')
-    p.println("mit viel liebevollem Hass in deine Laptoptastatur\neinprügelst.")
-    p.feed(motionUnits=5)
-    p.println("Auch wenn das überwiegend schöne Erfahrungen sind,")
-    p.println("wollen wir dir auch mal die Möglichkeit geben,")
-    p.println("die Gitarre etwas angenehmer zu halten")
-    p.println("(um nicht das Laptop auf dem Schoß zu klemmen)")
-    p.println("und dir dafür dieses Fernbedienungsdings geben.")
+    list = p.newList(SMALLFONT)
+    list.addItem("Name", "Lukas Bertram")
+    list.addItem("Alter", "31")
+    list.addItem("Lieblingsfarbe", "Musik")
+    list.addItem("Nasenlöcher", "2")
+    list.addItem("Fernbedienungdinger", "0")
+    list.addItem("Schenkung", "Jetzt")
+    list.print()
 
-    p.feed(times=2)
+    # p.feed(times=2)
+    # p.print(SMALLFONT)
+    # p.println("Lieber Lukas,")
+    # p.feed(motionUnits=5)
+    # p.println("wir blicken auf viele musikalische Erfahrung zurück.")
+    # p.println("Neben Gitarrenklängen gibt es vor allem ein Geräusch,")
+    # p.println("das wir im Studio mit dir verbinden: ", EMPH_ON, '"RACKLACKGGG!!"', EMPH_OFF)
+    # p.println("... wenn mal wieder eine Aufnahme einen fehler hatte,")
+    # p.println("und wie du die mittlerweile im Muskelgedächnis")
+    # p.println("eingebettete Kombination für ")
+    # p.println('"Aufnahme beenden, Audiospuren löschen, dankeok"')
+    # p.println("mit viel liebevollem Hass in deine Laptoptastatur\neinprügelst.")
+    # p.feed(motionUnits=5)
+    # p.println("Auch wenn das überwiegend schöne Erfahrungen sind,")
+    # p.println("wollen wir dir auch mal die Möglichkeit geben,")
+    # p.println("die Gitarre etwas angenehmer zu halten")
+    # p.println("(um nicht das Laptop auf dem Schoß zu klemmen)")
+    # p.println("und dir dafür dieses Fernbedienungsdings geben.")
 
-    p.println("Es bediente Sie")
-    p.feed(motionUnits=5)
-    p.println("Freund 1 / Freund 2")
+    # p.feed(times=2)
+
+    # p.println("Es bediente Sie")
+    # p.feed(motionUnits=5)
+    # p.println("Freund 1 / Freund 2")
 
 
     # # p.println(SMALLFONT, Emph.ON, "Ronny hat kleine Hände", Emph.OFF)
@@ -289,10 +302,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
     # # p.println(Emph.ON, "emph", Emph.OFF)
 
-    p.feed(times= 2)
+    # p.feed(times= 2)
 
-    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
+    # p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
 
-    p.feed(times= 2)
+    # p.feed(times= 2)
     p.print(defaultCut.FEED_CUT())
     s.close()
