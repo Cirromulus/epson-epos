@@ -134,7 +134,7 @@ class Printer():
 
     def getCurrentMotionUnitPerMM(self):
         units_per_mm = [m / MM_PER_INCH for m in self.currentMotionUnit]
-        print(f"current units_per_mm: {units_per_mm}")
+        # print(f"current units_per_mm: {units_per_mm}")
         return units_per_mm
 
     def setMotionUnit(self, mm_per_unit = .125):
@@ -211,9 +211,9 @@ class Printer():
         class Resolution:
             def __init__(self, hor_dpi, max_hor_dots, vert_dpi, bits_per_line, code):
                 self.hor_dpi = hor_dpi
-                self.max_hor_dots = max_hor_dots
+                self.max_hor_dots = int(round(max_hor_dots))
                 self.vert_dpi = vert_dpi
-                self.bits_per_line = bits_per_line
+                self.bits_per_line = int(bits_per_line)
                 self.code = code
 
             def __str__(self):
@@ -246,7 +246,8 @@ class Printer():
             print (f"Image: Scaling from {img.size} to {scaled_size}")
             img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
             img = img.convert('1') # convert image to black and white
-            img.save(f'intended_image_{os.path.basename(imagepath)}.png')
+            self.name = os.path.basename(imagepath)
+            img.save(f'intended_image_{self.name}.png')
 
             self.resolution = resolution
             self.img = img
@@ -289,10 +290,14 @@ class Printer():
         # page.finalizePrint()
         self.resetFormatting()
 
-    def feed(self, times = 1, motionUnits = None):
-        if not motionUnits:
-            motionUnits = self.getCurrentMotionUnitPerMM()[1]
-        self.print(escape + 'J' + chr(int(round(times * motionUnits))))
+    def feed(self, times = 1, mm = 1, motionUnits = None):
+        actual_motion_units = None
+        if motionUnits:
+            actual_motion_units = motionUnits
+        else:
+            actual_motion_units = mm * self.getCurrentMotionUnitPerMM()[1]
+
+        self.print(escape + 'J' + chr(int(round(times * actual_motion_units))))
 
     def print(self, *argv):
         print (argv)
@@ -301,7 +306,7 @@ class Printer():
 
     def send(self, *argv):
         for binary in argv:
-            print (f"send({len(binary)})")
+            # print (f"send({len(binary)})")
             self.socket.sendall(binary)
 
     def println(self, *argv):
@@ -326,18 +331,12 @@ from random import random
 
 # datetime object containing current date and time
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-# now = '2025-01-26 00:01:15'
 
-
-gang_img = Printer.Image("lil_bits.png", resolution=Printer.Image.DD_8)
-
-# import sys; sys.exit(1)
+an_img = Printer.Image("lil_bits.png", resolution=Printer.Image.DD_8)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
-
-    p.feed()
 
     # p.feed(times=2)
     # p.print(Just.CENTER)
@@ -345,16 +344,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # p.println(BIGFONT, "RIEBE / PIEPER")
     # p.feed()
     p.println(SMALLFONT, Just.CENTER, now)
-    p.println(str(gang_img.resolution))
-    # p.feed(times=2)
+    p.println(BIGFONT, an_img.name)
+    p.feed()
+    p.println(SMALLFONT, str(an_img.resolution))
+    p.feed()
     p.resetFormatting()
-    p.printImage(gang_img)
+    p.printImage(an_img)
 
     # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
     # p.feed()
 
     # list = p.newList(BIGFONT)
-    # list.addItem("Name", "Lukas Bertram")
+    # list.addItem("Name", "Name Vorname")
     # list.addItem("Alter", "31")
     # list.addItem("Lieblingsfarbe", "Musik")
     # list.addItem("Nasenlöcher", "2")
@@ -364,27 +365,16 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
     # p.feed(times=2)
     # p.print(SMALLFONT)
-    # p.println("Lieber Lukas,")
-    # p.feed(motionUnits=5)
-    # p.println("wir blicken auf viele musikalische Erfahrung zurück.")
-    # p.println("Neben Gitarrenklängen gibt es vor allem ein Geräusch,")
-    # p.println("das wir im Studio mit dir verbinden: ", EMPH_ON, '"RACKLACKGGG!!"', EMPH_OFF)
-    # p.println("... wenn mal wieder eine Aufnahme einen fehler hatte,")
-    # p.println("und wie du die mittlerweile im Muskelgedächnis")
-    # p.println("eingebettete Kombination für ")
-    # p.println('"Aufnahme beenden, Audiospuren löschen, dankeok"')
-    # p.println("mit viel liebevollem Hass in deine Laptoptastatur\neinprügelst.")
-    # p.feed(motionUnits=5)
-    # p.println("Auch wenn das überwiegend schöne Erfahrungen sind,")
-    # p.println("wollen wir dir auch mal die Möglichkeit geben,")
-    # p.println("die Gitarre etwas angenehmer zu halten")
-    # p.println("(um nicht das Laptop auf dem Schoß zu klemmen)")
-    # p.println("und dir dafür dieses Fernbedienungsdings geben.")
+    # p.println("Lieber Name,")
+    # p.feed()
+    # p.println("Bla.")
+    # p.feed()
+    # p.println("Bla")
 
     # p.feed(times=2)
 
     # p.println("Es bediente Sie")
-    # p.feed(motionUnits=5)
+    # p.feed()
     # p.println("Freund 1 / Freund 2")
 
 
@@ -394,7 +384,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # # p.println(DoubleStrike.ON, "double", DoubleStrike.OFF)
     # # p.println(Emph.ON, "emph", Emph.OFF)
 
-    # p.feed(times= 2)
 
     # p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
 
