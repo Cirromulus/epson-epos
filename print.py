@@ -141,7 +141,7 @@ class Printer():
         desired_units_per_inch = int(round(MM_PER_INCH / mm_per_unit))
         assert(desired_units_per_inch <= 256)
         self.currentMotionUnit = (desired_units_per_inch, desired_units_per_inch)
-        print (f"set current motion unit: {self.currentMotionUnit} (1 inch / x)")
+        # print (f"set current motion unit: {self.currentMotionUnit} (1 inch / x)")
         self.send(bytes([ord(group), ord("P"), desired_units_per_inch, desired_units_per_inch]))
 
     class List:
@@ -187,7 +187,7 @@ class Printer():
 
         def advanceWriteBuffer(self, mm):
             needed_units = round(mm * self.printer.getCurrentMotionUnitPerMM()[1])
-            print (f"forwarding {mm}mm -> {needed_units} units")
+            # print (f"forwarding {mm}mm -> {needed_units} units")
             self.printer.feed(motionUnits = needed_units)
 
 
@@ -296,7 +296,7 @@ class Printer():
             base_y += image.resolution.bits_per_line
             current_row_nr = int(base_y / image.resolution.bits_per_line)
             print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line}")
-            print (data)
+            # print (data)
             self.send(BASE.encode(self.encoding), bytes(image.resolution.code), bigEndian(num_horizontal_dots, width_bytes=2), data)
             page.advanceWriteBuffer(mm_per_line)
 
