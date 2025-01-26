@@ -234,7 +234,7 @@ class Printer():
         DD_24 = Resolution(hor_dpi=180, max_hor_dots=512/2, vert_dpi=180, bits_per_line=24, code=33)
 
 
-        def __init__(self, imagepath, resolution : Resolution, desired_width_ratio = 1):
+        def __init__(self, imagepath, resolution : Resolution = DD_8, desired_width_ratio = 1):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             print (f"Image: Opening {imagepath}")
@@ -265,18 +265,19 @@ class Printer():
             data = bytearray()
             for x in range(num_horizontal_dots):
                 boyt = 0
-                for offs_y in range(min(num_vertical_dots - base_y, image.resolution.bits_per_line)):
+                this_row_vert_dots = min(num_vertical_dots - base_y, image.resolution.bits_per_line)
+                for offs_y in range(this_row_vert_dots):
                     byteoffs = offs_y % 8
                     coord = (x, base_y + offs_y)
                     px = (~image.img.getpixel(coord)) & 1
                     boyt |= px << ((8-1) - byteoffs)
                     # print (f"coord= {coord}, offs_y={offs_y} ({byteoffs})-> bit {px} boyt {boyt}")
-                    if byteoffs == 8 - 1:
+                    if byteoffs == this_row_vert_dots - 1:
                         # print (f"dotgroup {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
                         data.append(boyt)
             base_y += image.resolution.bits_per_line
             current_row_nr = int(base_y / image.resolution.bits_per_line)
-            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line}")
+            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line} ({this_row_vert_dots} vert dots)")
             # print (data)
             self.send(BASE.encode(self.encoding), bytes(image.resolution.code), bigEndian(num_horizontal_dots, width_bytes=2), data)
             self.feed(motionUnits=round(mm_per_line * self.getCurrentMotionUnitPerMM()[1]))
@@ -328,7 +329,7 @@ now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # now = '2025-01-26 00:01:15'
 
 
-gang_img = Printer.Image("drei.png", resolution=Printer.Image.DD_8)
+gang_img = Printer.Image("lil_bits.png", resolution=Printer.Image.DD_8)
 
 # import sys; sys.exit(1)
 
