@@ -228,10 +228,10 @@ class Printer():
         #     DD_8 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=60, bits_per_line=8, code=1)
         #     SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
         #     DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
-        SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
+        SD_8 = Resolution(hor_dpi=90/2, max_hor_dots=256/2, vert_dpi=60, bits_per_line=8, code=0)
         DD_8 = Resolution(hor_dpi=180/2, max_hor_dots=512/2, vert_dpi=60, bits_per_line=8, code=1)
         SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
-        DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
+        DD_24 = Resolution(hor_dpi=180, max_hor_dots=512/2, vert_dpi=180, bits_per_line=24, code=33)
 
 
         def __init__(self, imagepath, resolution : Resolution, desired_width_ratio = 1):
@@ -258,26 +258,7 @@ class Printer():
 
         num_horizontal_dots = image.img.size[0]
         num_vertical_dots = image.img.size[1]
-        # if num_horizontal_dots > TM_T88IV_max_horizontal_dots:
-        #     print (num_horizontal_dots, " > ", TM_T88IV_max_horizontal_dots)
-        # "big endian"
-
-        # "When printing multiple line bit images, selecting unidirectional print mode
-        # with ESC U enables printing patterns in which the top and bottom parts are
-        # aligned vertically." [But I think that is incorrect]
-        # self.print(Unidirectional(True))
-
-        # setup "page mode"
-        mm_per_unit = 0.125
-        printable_area = Printer.configuredPaper.width # guess
-        hor_size = printable_area / mm_per_unit
-        vert_size = num_vertical_dots / (image.resolution.vert_dpi / MM_PER_INCH) / mm_per_unit
-        page = p.setupPage(size_hor=hor_size, size_vert=vert_size, resolution=mm_per_unit)
-        page.setDirection(Printer.PageMode.Direction.upperLeft)
-
-        # ugly addition thing that is probably a rounding error
-        ugly_correction = 2 * mm_per_unit
-        mm_per_line = ((image.resolution.bits_per_line + ugly_correction) / image.resolution.vert_dpi) * MM_PER_INCH
+        mm_per_line = ((image.resolution.bits_per_line) / image.resolution.vert_dpi) * MM_PER_INCH
 
         base_y = 0
         while base_y < num_vertical_dots:
@@ -298,9 +279,13 @@ class Printer():
             print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line}")
             # print (data)
             self.send(BASE.encode(self.encoding), bytes(image.resolution.code), bigEndian(num_horizontal_dots, width_bytes=2), data)
-            page.advanceWriteBuffer(mm_per_line)
+            self.feed(motionUnits=round(mm_per_line * self.getCurrentMotionUnitPerMM()[1]))
 
-        page.finalizePrint()
+            # fixme debug: Modes other than DD_8 do not seem to work
+            if image.resolution == Printer.Image.DD_24 and current_row_nr > 2:
+                break
+
+        # page.finalizePrint()
         self.resetFormatting()
 
     def feed(self, times = 1, motionUnits = None):
