@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 
-from PIL import Image # todo: somewhere else
+import PIL.Image # todo: somewhere else
 import socket
+import os.path
 
 HOST = "192.168.0.250"
 PORT = 9100  # The port used by the server
@@ -72,8 +73,18 @@ def Unidirectional(on = True):
     return escape + "U" + chr(1 if on else 0)
 
 class Printer():
+    class PaperWidth:
+        def __init__(self, w):
+            self.width = w
+
+    SMALLPAPER = PaperWidth(58)
+    WIDEPAPER = PaperWidth(80)
+
+    configuredPaper = WIDEPAPER
 
     def getMaxCharacterWidth(font = SMALLFONT):
+        assert(Printer.configuredPaper == Printer.WIDEPAPER, "hardcoded currently")
+
         if font == SMALLFONT:
             return 56
         elif font == BIGFONT:
@@ -105,7 +116,7 @@ class Printer():
     def resetFormatting(self):
         self.print(escape + '@')
         # 1 inch / 180 ... 0.1xx mm
-        self.send(bytes([ord(group), ord("P"), 180, 180]))
+        # self.send(bytes([ord(group), ord("P"), 180, 180]))
 
 
 
@@ -137,30 +148,54 @@ class Printer():
         else:
             self.send(bytes(FeedForward))
 
-    # Paper width 80 mm
-    TM_T88IV_max_horizontal_dots = 256
+    class Image:
+        class Resolution:
+            def __init__(self, hor_dpi, max_hor_dots, vert_dpi, bits_per_line, code):
+                self.hor_dpi = hor_dpi
+                self.max_hor_dots = max_hor_dots
+                self.vert_dpi = vert_dpi
+                self.bits_per_line = bits_per_line
+                self.code = code
 
-    class Image():
-        def __init__(self, imagepath = "drei.png", desired_width_ratio = .9):
-            desired_width = int(Printer.TM_T88IV_max_horizontal_dots * desired_width_ratio)
+            def __str__(self):
+                return f"Resolution: h_dpi {self.hor_dpi} (max {self.max_hor_dots}), v_dpi {self.vert_dpi}, bpl {self.bits_per_line}"
+
+        # Hardcoded to 80mm paper currently
+        # also, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/esc_asterisk.html
+        # seems to be incorrect (half DPI than said!?)
+        # SD seems to not work, but DD code "1" works with SD resolution.?!
+        # class Official:
+        #     SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
+        #     DD_8 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=60, bits_per_line=8, code=1)
+        #     SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
+        #     DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
+        # SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
+        DD_8 = Resolution(hor_dpi=180/2, max_hor_dots=512/2, vert_dpi=60, bits_per_line=8, code=1)
+        SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
+        DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
+
+
+        def __init__(self, imagepath, resolution : Resolution, desired_width_ratio = 1):
+            desired_width = int(resolution.max_hor_dots * desired_width_ratio)
+            height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             print (f"Image: Opening {imagepath}")
-            img = Image.open(imagepath) # open colour image
+            img = PIL.Image.open(imagepath) # open colour image
             wpercent = (desired_width / float(img.size[0]))
-            hsize = int((float(img.size[1]) * float(wpercent)))
+            hsize = int(img.size[1] * wpercent / height_stretch_ratio)
             scaled_size = (desired_width, hsize)
+            print (f"Image: {resolution}")
             print (f"Image: Scaling from {img.size} to {scaled_size}")
-            img = img.resize(scaled_size, Image.Resampling.LANCZOS)
+            img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
             img = img.convert('1') # convert image to black and white
+            img.save(f'intended_image_{os.path.basename(imagepath)}.png')
+
+            self.resolution = resolution
             self.img = img
-            self.img.save('intended_image.png')
 
     def printImage(self, image : Image):
         # ASCII ESC * m nL nH d1 ... dk
 
         BASE = escape + '*'
-
-        DD_8 = 1  # "double density"
-        DD_24 = 33  # "double density"
 
         # When printing multiple line bit images, selecting unidirectional print mode
         # with ESC U enables printing patterns in which the top and bottom parts are
@@ -174,26 +209,27 @@ class Printer():
         # "big endian"
         num_dots_serialized = bytes([num_horizontal_dots % 256, int(num_horizontal_dots / 256)])
 
-        dotsperline = 8 # relying on "DD_8"
         base_y = 0
         while base_y < num_vertical_dots:
             data = bytearray()
             for x in range(num_horizontal_dots):
                 boyt = 0
-                for offs_y in range(min(num_vertical_dots - base_y, dotsperline)):
-                    px = image.img.getpixel((x, base_y + offs_y))
+                for offs_y in range(min(num_vertical_dots - base_y, image.resolution.bits_per_line)):
+                    byteoffs = offs_y % 8
+                    coord = (x, base_y + offs_y)
+                    px = image.img.getpixel(coord)
                     # print (f"pixul: {px}")
                     px = 1 - min(px, 1)
                     # print (f"pixul: {px}")
-                    boyt = boyt + (px << ((dotsperline - 1) - offs_y))
-                    print (f"x= {x}, offs_y={offs_y}-> bit {px} boyt {boyt}")
-                data.append(boyt)
-                # print (f"byte {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
-            base_y += dotsperline
-            print (f"sending image row {base_y / dotsperline} of {num_vertical_dots}")
+                    boyt = boyt + (px << ((8-1) - byteoffs))
+                    print (f"coord= {coord}, offs_y={offs_y}-> bit {px} boyt {boyt}")
+                    if byteoffs == 8 - 1:
+                        print (f"dotgroup {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
+                        data.append(boyt)
+            base_y += image.resolution.bits_per_line
+            print (f"sending image row {base_y / image.resolution.bits_per_line} of {num_vertical_dots / image.resolution.bits_per_line}")
             print (data)
-            self.send(BASE.encode(self.encoding), bytes(DD_8), num_dots_serialized, data)
-            self.print('\n')
+            self.send(BASE.encode(self.encoding), bytes(image.resolution.code), num_dots_serialized, data)
         self.resetFormatting()
 
     def feed(self, times = 1, motionUnits = 20):
@@ -233,12 +269,15 @@ from random import random
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # now = '2025-01-26 00:01:15'
 
+
+gang_img = Printer.Image("drei.png", resolution=Printer.Image.DD_24)
+
+# import sys; sys.exit(1)
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
-    # p.feed()
-
-    # p.printImage(Printer.Image())
+    p.feed()
 
     # p.feed(times=2)
     # p.print(Just.CENTER)
@@ -246,29 +285,22 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # p.println(BIGFONT, "RIEBE / PIEPER")
     # p.feed()
     p.println(SMALLFONT, Just.CENTER, now)
+    p.println(str(gang_img.resolution))
     # p.feed(times=2)
-    # p.resetFormatting()
+    p.resetFormatting()
+    p.printImage(gang_img)
 
     # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
     # p.feed()
 
-    list = p.newList(BIGFONT)
-    list.addItem("Name", "Lukas Bertram")
-    list.addItem("Alter", "31")
-    list.addItem("Lieblingsfarbe", "Musik")
-    list.addItem("Nasenlöcher", "2")
-    list.addItem("Fernbedienungdinger", "0")
-    list.addItem("Schenkung", "Jetzt")
-    list.print()
-
-    list = p.newList(SMALLFONT)
-    list.addItem("Name", "Lukas Bertram")
-    list.addItem("Alter", "31")
-    list.addItem("Lieblingsfarbe", "Musik")
-    list.addItem("Nasenlöcher", "2")
-    list.addItem("Fernbedienungdinger", "0")
-    list.addItem("Schenkung", "Jetzt")
-    list.print()
+    # list = p.newList(BIGFONT)
+    # list.addItem("Name", "Lukas Bertram")
+    # list.addItem("Alter", "31")
+    # list.addItem("Lieblingsfarbe", "Musik")
+    # list.addItem("Nasenlöcher", "2")
+    # list.addItem("Fernbedienungdinger", "0")
+    # list.addItem("Schenkung", "Jetzt")
+    # list.print()
 
     # p.feed(times=2)
     # p.print(SMALLFONT)
