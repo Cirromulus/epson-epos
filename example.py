@@ -12,10 +12,10 @@ PORT = 9100  # The port used by the server
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 images = {
-    "sd_8" : Printer.Image("cat.png", resolution=Printer.Image.SD_8),
-    "dd_8" : Printer.Image("cat.png", resolution=Printer.Image.DD_8),
-    "sd_24" : Printer.Image("cat.png", resolution=Printer.Image.SD_24),
-    "dd_24" : Printer.Image("cat.png", resolution=Printer.Image.DD_24),
+    "sd_8" : Printer.Image("cat_2.png", resolution=Printer.Image.SD_8),
+    "dd_8" : Printer.Image("cat_2.png", resolution=Printer.Image.DD_8),
+    "sd_24" : Printer.Image("cat_2.png", resolution=Printer.Image.SD_24),
+    "dd_24" : Printer.Image("cat_2.png", resolution=Printer.Image.DD_24),
 }
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

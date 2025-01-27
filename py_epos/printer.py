@@ -217,7 +217,7 @@ class Printer():
 
         def nextRow(self):
             assert(self.mm_per_row > 0)
-            # print (f"NextRow: feeding {self.mm_per_row} mm")
+            print (f"NextRow: feeding {self.mm_per_row} mm")
             self.printer.feed(mm=self.mm_per_row)
 
     def setupPage(self, **kwarg) -> PageMode:
@@ -311,8 +311,9 @@ class Printer():
                 if (self.byteoffs == 8):
                     self.finishByte()
 
-            def getStream(self):
+            def getBytes(self):
                 if self.byteoffs != 0:
+                    print ("warn: unfinished byte")
                     self.finishByte()
                 return self.stream
 
@@ -328,8 +329,9 @@ class Printer():
         if image.resolution.vert_dpi > 100:
             # It seems that the printer needs page mode to not produce fine gaps in "high density" mode
             print (f"Activating page mode for high-density image")
-            size_hor_mm = num_horizontal_dots / image.resolution.hor_dpi * MM_PER_INCH
-            mm_per_row = ((image.resolution.bits_per_line + .5) / image.resolution.vert_dpi) * MM_PER_INCH
+            error = .5
+            size_hor_mm = (num_horizontal_dots + error) / image.resolution.hor_dpi * MM_PER_INCH
+            mm_per_row = ((image.resolution.bits_per_line + error) / image.resolution.vert_dpi) * MM_PER_INCH
             # .. page mode needs rounding up to full row
             size_vert_mm = math.ceil(needed_rows) * mm_per_row
             page = self.setupPage(size_hor_mm=size_hor_mm, size_vert_mm=size_vert_mm, mm_per_row=mm_per_row)
@@ -339,23 +341,27 @@ class Printer():
             this_line_valid_bits = min(image.resolution.bits_per_line, num_vertical_dots - base_y)
             this_line_overflow_bits = image.resolution.bits_per_line - this_line_valid_bits
             current_row_nr = int(base_y / image.resolution.bits_per_line)
-            print (f"sending image row {current_row_nr + 1} of {needed_rows} ({this_line_valid_bits} vert dots", end='')
+            print (f"sending image row {current_row_nr + 1} of {needed_rows} ({num_horizontal_dots} hor dots, {this_line_valid_bits} vert dots", end='')
             if this_line_overflow_bits > 0:
                 print(f", filling blank {this_line_overflow_bits} dots)")
             else:
                 print(")")
 
-            data = Bitconsumer()
+            stream = Bitconsumer()
             for x in range(num_horizontal_dots):
                 for offs_y in range(this_line_valid_bits):
                     coord = (x, base_y + offs_y)
                     px = (~image.img.getpixel(coord)) & 1
-                    data.consume(px)
+                    if x == 0 or x >= num_horizontal_dots-1:
+                        px = 1
+                    stream.consume(px)
                 for _ in range(this_line_overflow_bits):
-                    data.consume(0)
+                    stream.consume(0)
+
+            assert(len(stream.getBytes()) == num_horizontal_dots * (image.resolution.bits_per_line / 8))
 
             self.send(BASE, bytes([image.resolution.code]), bigEndian(num_horizontal_dots, width_bytes=2),
-                      data.getStream(), echo=True)
+                      stream.getBytes())
             base_y += image.resolution.bits_per_line
 
 
@@ -396,7 +402,7 @@ class Printer():
     def send(self, *argv, echo = False):
         tosend = bytearray()
         print (f"send({[len(arg) for arg in argv]})")
-        maxPrintBinLen = 20
+        maxPrintBinLen = 20000
         for binary in argv:
             tosend += binary
             if echo:
