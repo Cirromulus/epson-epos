@@ -229,21 +229,13 @@ class Printer():
                 self.code = code
 
             def __str__(self):
-                return f"Resolution: h_dpi {self.hor_dpi} (max {self.max_hor_dots}), v_dpi {self.vert_dpi}, bpl {self.bits_per_line}"
+                return f"Resolution: h_dpi {self.hor_dpi} (max {self.max_hor_dots}), v_dpi {self.vert_dpi}, bpl {self.bits_per_line}" # (code {self.code})"
 
         # Hardcoded to 80mm paper currently
-        # also, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/esc_asterisk.html
-        # seems to be incorrect (half DPI than said!?)
-        # Currently only DD_8 code "1" works, but with SD resolution.?!
-        # class Official:
-        #     SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
-        #     DD_8 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=60, bits_per_line=8, code=1)
-        #     SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
-        #     DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
-        SD_8 = Resolution(hor_dpi=90/2, max_hor_dots=256/2, vert_dpi=60, bits_per_line=8, code=0)
-        DD_8 = Resolution(hor_dpi=180/2, max_hor_dots=512/2, vert_dpi=60, bits_per_line=8, code=1)
+        SD_8 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=60, bits_per_line=8, code=0)
+        DD_8 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=60, bits_per_line=8, code=1)
         SD_24 = Resolution(hor_dpi=90, max_hor_dots=256, vert_dpi=180, bits_per_line=24, code=32)
-        DD_24 = Resolution(hor_dpi=180, max_hor_dots=512/2, vert_dpi=180, bits_per_line=24, code=33)
+        DD_24 = Resolution(hor_dpi=180, max_hor_dots=512, vert_dpi=180, bits_per_line=24, code=33)
 
 
         def __init__(self,
@@ -279,39 +271,58 @@ class Printer():
     def printImage(self, image : Image):
         # ASCII ESC * m nL nH d1 ... dk
 
-        BASE = escape + '*'
+        class Bitconsumer:
+            def resetByte(self):
+                self.byteoffs = 0
+                self.currentByte = 0
+
+            def __init__(self):
+                self.stream = bytearray()
+                self.resetByte()
+
+            def finishByte(self):
+                self.stream.append(self.currentByte)
+                self.resetByte()
+
+            def consume(self, bit):
+                # Populates MSB first!
+                self.currentByte |= (bit & 1) << (7 - self.byteoffs)
+                self.byteoffs += 1
+                if (self.byteoffs == 8):
+                    self.finishByte()
+
+            def getStream(self):
+                if self.byteoffs != 0:
+                    self.finishByte()
+                return self.stream
+
+        BASE = bytes([ord(escape), ord('*')])
+
+        self.print(Unidirectional(True))    # is suggested to avoid spacings between lines, but has no effect
 
         num_horizontal_dots = image.img.size[0]
         num_vertical_dots = image.img.size[1]
-        mm_per_line = ((image.resolution.bits_per_line) / image.resolution.vert_dpi) * MM_PER_INCH
+        # mm_per_line = ((image.resolution.bits_per_line) / image.resolution.vert_dpi) * MM_PER_INCH
 
         base_y = 0
         while base_y < num_vertical_dots:
-            data = bytearray()
+            data = Bitconsumer()
             for x in range(num_horizontal_dots):
-                boyt = 0
-                this_row_vert_dots = min(num_vertical_dots - base_y, image.resolution.bits_per_line)
-                for offs_y in range(this_row_vert_dots):
-                    byteoffs = offs_y % 8
+                for offs_y in range(image.resolution.bits_per_line):
                     coord = (x, base_y + offs_y)
-                    px = (~image.img.getpixel(coord)) & 1
-                    boyt |= px << ((8-1) - byteoffs)
-                    # print (f"coord= {coord}, offs_y={offs_y} ({byteoffs})-> bit {px} boyt {boyt}")
-                    if byteoffs == this_row_vert_dots - 1:
-                        # print (f"dotgroup {x} (len {len(data)}) of {num_horizontal_dots} : {boyt}")
-                        data.append(boyt)
+                    px = 0  # default, in case we have the last line not perfectly filled
+                    if coord[1] < num_vertical_dots:
+                        px = (~image.img.getpixel(coord)) & 1
+                    data.consume(px)
+
             base_y += image.resolution.bits_per_line
             current_row_nr = int(base_y / image.resolution.bits_per_line)
-            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line} ({this_row_vert_dots} vert dots)")
-            # print (data)
-            self.send(BASE.encode(self.encoding), bytes(image.resolution.code), bigEndian(num_horizontal_dots, width_bytes=2), data)
-            self.feed(motionUnits=round(mm_per_line * self.getCurrentMotionUnitPerMM()[1]))
+            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line} ({image.resolution.bits_per_line} vert dots)")
+            self.send(BASE, bytes([image.resolution.code]), bigEndian(num_horizontal_dots, width_bytes=2), data.getStream())
 
-            # fixme debug: Modes other than DD_8 do not seem to work
-            if image.resolution == Printer.Image.DD_24 and current_row_nr > 2:
-                break
+            # FIXME: Find out why "zero" is also ok instead of mm_per_line
+            self.feed(mm=0)
 
-        # page.finalizePrint()
         self.resetFormatting()
 
     def feed(self, times = 1, mm = 1, motionUnits = None):
@@ -326,15 +337,28 @@ class Printer():
     def cut(self, type = defaultCut.FEED_CUT()):
         self.print(type)
 
-    def print(self, *argv):
-        print (argv)
+    def print(self, *argv, echo= False):
         for string in argv:
+            if echo:
+                if string.isprintable:
+                    print (string)
+                else:
+                    for b in string:
+                        print (f"{b:02X} ", end='')
+                    print()
             self.socket.sendall(string.encode(self.encoding))
 
-    def send(self, *argv):
+    def send(self, *argv, echo = False):
+        tosend = bytearray()
+        maxPrintBinLen = 20
         for binary in argv:
+            tosend += binary
             # print (f"send({len(binary)})")
-            self.socket.sendall(binary)
+            if echo:
+                for b in binary[:maxPrintBinLen]:
+                    print (f"{b:02X} ", end='')
+                print ("..." if len(binary) > maxPrintBinLen else "")
+        self.socket.sendall(tosend)
 
     def println(self, *argv):
         self.print(*argv, "\n")

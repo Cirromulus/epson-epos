@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from py_epos.printer import *
 from datetime import datetime
 from random import random
@@ -9,33 +11,25 @@ PORT = 9100  # The port used by the server
 # datetime object containing current date and time
 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-an_img = Printer.Image("cat.png")
-other_img = Printer.Image("cat_2.png")
-
-lorem = "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
+images = {
+    "sd_8" : Printer.Image("testprint.png", resolution=Printer.Image.SD_8),
+    "dd_8" : Printer.Image("testprint.png", resolution=Printer.Image.DD_8),
+    "sd_24" : Printer.Image("testprint.png", resolution=Printer.Image.SD_24),
+    "dd_24" : Printer.Image("testprint.png", resolution=Printer.Image.DD_24),
+}
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     p = Printer(s)
 
-    # p.feed(times=2)
-    # p.print(Just.CENTER)
-    # p.println(BIGFONT, "Geburtstagsgrüße")
-    # p.println(BIGFONT, "RIEBE / PIEPER")
-    # p.feed()
     p.println(SMALLFONT, Just.CENTER, now)
-    p.println(BIGFONT, an_img.name)
-    p.feed()
-    p.println(SMALLFONT, str(an_img.resolution))
-    p.feed()
-    p.resetFormatting()
-    p.printImage(an_img)
-
-    p.feed()
-    p.println(lorem)
-    p.feed(times=2)
-
-    p.printImage(other_img)
+    for (desc, img) in images.items():
+        p.resetFormatting()
+        print(desc, " ", img.resolution)
+        p.println(SMALLFONT, desc, "  ", BIGFONT, img.name)
+        p.println(SMALLFONT, str(img.resolution))
+        p.printImage(img)
+        p.feed()
 
     # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)
     # p.feed()
@@ -71,8 +65,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     # # p.println(Emph.ON, "emph", Emph.OFF)
 
 
-    p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
-    p.feed(times= 2)
+    # p.print(Just.CENTER, Barcode.Setup() + Barcode.send("PIMMEL"))
+    # p.feed(times= 2)
 
     p.print(defaultCut.FEED_CUT())
     s.close()
