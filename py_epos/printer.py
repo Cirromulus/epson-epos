@@ -140,7 +140,7 @@ class Printer():
         # print(f"current units_per_mm: {units_per_mm}")
         return units_per_mm
 
-    def setMotionUnit(self, mm_per_unit = .125):
+    def setMotionUnit(self, mm_per_unit = INCH_PER_MM):
         desired_units_per_inch = int(round(MM_PER_INCH / mm_per_unit))
         assert(desired_units_per_inch <= 256)
         self.currentMotionUnit = (desired_units_per_inch, desired_units_per_inch)
@@ -157,7 +157,7 @@ class Printer():
             self.items.append([nameleft, thingright])
 
         def print(self):
-            self.printer.print(escape + '@')    # reset existing formatting
+            self.printer.resetFormatting()
             self.printer.print(self.font)
             width = Printer.getMaxCharacterWidth(self.font)
             maxWidthRight = max([len(right) for (_, right) in self.items])
@@ -197,7 +197,7 @@ class Printer():
 
             self.printer.send(bytes([ord(escape), ord('W')]),
                     bigEndian(origin_x_units), bigEndian(origin_y_units),
-                    bigEndian(size_hor_units), bigEndian(size_vert_units), echo=True)
+                    bigEndian(size_hor_units), bigEndian(size_vert_units))
 
         def setPageMode(self):
             self.printer.print(escape + 'L')
@@ -334,7 +334,8 @@ class Printer():
             mm_per_row = ((image.resolution.bits_per_line + error) / image.resolution.vert_dpi) * MM_PER_INCH
             # .. page mode needs rounding up to full row
             size_vert_mm = math.ceil(needed_rows) * mm_per_row
-            page = self.setupPage(size_hor_mm=size_hor_mm, size_vert_mm=size_vert_mm, mm_per_row=mm_per_row)
+            page = self.setupPage(size_hor_mm=size_hor_mm, size_vert_mm=size_vert_mm,
+                                  mm_per_row=mm_per_row, resolution= (1 / image.resolution.vert_dpi) * MM_PER_INCH)
 
         base_y = 0
         while base_y < num_vertical_dots:
@@ -352,8 +353,6 @@ class Printer():
                 for offs_y in range(this_line_valid_bits):
                     coord = (x, base_y + offs_y)
                     px = (~image.img.getpixel(coord)) & 1
-                    if x == 0 or x >= num_horizontal_dots-1:
-                        px = 1
                     stream.consume(px)
                 for _ in range(this_line_overflow_bits):
                     stream.consume(0)
@@ -363,7 +362,6 @@ class Printer():
             self.send(BASE, bytes([image.resolution.code]), bigEndian(num_horizontal_dots, width_bytes=2),
                       stream.getBytes())
             base_y += image.resolution.bits_per_line
-
 
             if page:
                 page.nextRow()
