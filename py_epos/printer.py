@@ -2,6 +2,7 @@
 
 import PIL.Image
 import os.path
+import math # wow, for ceil
 
 MM_PER_INCH = 25.4
 INCH_PER_MM = 1 / MM_PER_INCH
@@ -119,6 +120,13 @@ class Printer():
             tosend = tosend + chr(p)
         self.print(tosend + chr(0))
 
+    def setPrintSpeed(self, speed = 0):
+        # zero is default, one is slow
+        BASE = group + '(K'
+        command = bigEndian(2, width_bytes=2)
+        function = 50
+        self.send(BASE.encode(self.encoding), command, bytes([function + speed]))
+
     def setCodePage(self):
         # todo: actual parameter
         self.print(Printer.CodeTable.SET_NORDIC)
@@ -162,13 +170,40 @@ class Printer():
         return Printer.List(self, *args, **kwargs)
 
     class PageMode:
-        def __init__(self, printer):
+        def __init__(self, printer, size_hor_mm, size_vert_mm, mm_per_row = 0, origin_x_mm = 0, origin_y_mm = 0, resolution = .125):
             self.printer = printer
+            self.mm_per_row = mm_per_row
+            #The maximum print area height that can be set differs according to the printing control
+            # (single color / two-color) setting.
+            # Refer to GS ( E   <Function 5> for specifying printing control (single-color / two-color).
+            # When single-color printing control is selected: 234.53 mm {3324/360 inches}
+            MAX_VERT_SIZE_mm = 234.53
+            if size_vert_mm > MAX_VERT_SIZE_mm:
+                print (f"Error: Page mode only supports up to {MAX_VERT_SIZE_mm}mm, you have requested {size_vert_mm}")
+                print ("TODO: Split large images into multiple page setups")
+                size_vert_mm = MAX_VERT_SIZE_mm - .1
+
+            self.setPageMode()
+            self.printer.setMotionUnit(resolution)
+
+            origin_x_units = int(round(origin_x_mm * self.printer.getCurrentMotionUnitPerMM()[0]))
+            origin_y_units = int(round(origin_y_mm * self.printer.getCurrentMotionUnitPerMM()[1]))
+            size_hor_units = int(round(size_hor_mm * self.printer.getCurrentMotionUnitPerMM()[0]))
+            size_vert_units = int(round(size_vert_mm * self.printer.getCurrentMotionUnitPerMM()[1]))
+
+            print (f"Setting up page at {origin_x_mm}:{origin_y_mm} {size_hor_mm}x{size_vert_mm} (mm)")
+            print (f"                   {origin_x_units}:{origin_y_units} {size_hor_units}x{size_vert_units} (units)")
+            print (f"                   with {mm_per_row}mm per row")
+
+            self.printer.send(bytes([ord(escape), ord('W')]),
+                    bigEndian(origin_x_units), bigEndian(origin_y_units),
+                    bigEndian(size_hor_units), bigEndian(size_vert_units), echo=True)
 
         def setPageMode(self):
             self.printer.print(escape + 'L')
 
         def finalizePrint(self):
+            print ("Page mode: Finalizing")
             self.printer.print(FeedForward)
 
         class Direction:
@@ -180,30 +215,15 @@ class Printer():
         def setDirection(self, direction : Direction):
             self.printer.print(escape + 'T' + chr(direction))
 
-        def advanceWriteBuffer(self, mm):
-            needed_units = round(mm * self.printer.getCurrentMotionUnitPerMM()[1])
-            # print (f"forwarding {mm}mm -> {needed_units} units")
-            self.printer.feed(motionUnits = needed_units)
+        def nextRow(self):
+            assert(self.mm_per_row > 0)
+            # print (f"NextRow: feeding {self.mm_per_row} mm")
+            self.printer.feed(mm=self.mm_per_row)
 
-
-    def setupPage(self, size_hor, size_vert, origin_x = 0, origin_y = 0, resolution = .125) -> PageMode:
-        #The maximum print area height that can be set differs according to the printing control
-        # (single color / two-color) setting.
-        # Refer to GS ( E   <Function 5> for specifying printing control (single-color / two-color).
-        # When single-color printing control is selected: 234.53 mm {3324/360 inches}
-
-        # TODO: Perhaps have given parameters in mm and not in "units"
-        page = Printer.PageMode(self)
-        page.setPageMode()
-        self.mmPerUnit = resolution
-        self.setMotionUnit(resolution)
-        print (f"Setting up page at {origin_x}:{origin_y} {size_hor}x{size_vert} (motion units)")
-
-        self.send(bytes([ord(escape), ord('W')]), bigEndian(int(origin_x)), bigEndian(int(origin_y)), bigEndian(int(size_hor)), bigEndian(int(size_vert)))
-        return page
+    def setupPage(self, **kwarg) -> PageMode:
+        return Printer.PageMode(self, **kwarg)
 
     class Image:
-
         #thang @ https://stackoverflow.com/questions/43864101/python-pil-check-if-image-is-transparent
         def has_transparency(img : PIL.Image):
             if img.info.get("transparency", None) is not None:
@@ -298,30 +318,55 @@ class Printer():
 
         BASE = bytes([ord(escape), ord('*')])
 
-        self.print(Unidirectional(True))    # is suggested to avoid spacings between lines, but has no effect
+        # self.print(Unidirectional(True))    # is suggested to avoid spacings between lines, but has no effect
 
         num_horizontal_dots = image.img.size[0]
         num_vertical_dots = image.img.size[1]
-        # mm_per_line = ((image.resolution.bits_per_line) / image.resolution.vert_dpi) * MM_PER_INCH
+        needed_rows = num_vertical_dots / image.resolution.bits_per_line
+
+        page = None
+        if image.resolution.vert_dpi > 100:
+            # It seems that the printer needs page mode to not produce fine gaps in "high density" mode
+            print (f"Activating page mode for high-density image")
+            size_hor_mm = num_horizontal_dots / image.resolution.hor_dpi * MM_PER_INCH
+            mm_per_row = ((image.resolution.bits_per_line + .5) / image.resolution.vert_dpi) * MM_PER_INCH
+            # .. page mode needs rounding up to full row
+            size_vert_mm = math.ceil(needed_rows) * mm_per_row
+            page = self.setupPage(size_hor_mm=size_hor_mm, size_vert_mm=size_vert_mm, mm_per_row=mm_per_row)
 
         base_y = 0
         while base_y < num_vertical_dots:
+            this_line_valid_bits = min(image.resolution.bits_per_line, num_vertical_dots - base_y)
+            this_line_overflow_bits = image.resolution.bits_per_line - this_line_valid_bits
+            current_row_nr = int(base_y / image.resolution.bits_per_line)
+            print (f"sending image row {current_row_nr + 1} of {needed_rows} ({this_line_valid_bits} vert dots", end='')
+            if this_line_overflow_bits > 0:
+                print(f", filling blank {this_line_overflow_bits} dots)")
+            else:
+                print(")")
+
             data = Bitconsumer()
             for x in range(num_horizontal_dots):
-                for offs_y in range(image.resolution.bits_per_line):
+                for offs_y in range(this_line_valid_bits):
                     coord = (x, base_y + offs_y)
-                    px = 0  # default, in case we have the last line not perfectly filled
-                    if coord[1] < num_vertical_dots:
-                        px = (~image.img.getpixel(coord)) & 1
+                    px = (~image.img.getpixel(coord)) & 1
                     data.consume(px)
+                for _ in range(this_line_overflow_bits):
+                    data.consume(0)
 
+            self.send(BASE, bytes([image.resolution.code]), bigEndian(num_horizontal_dots, width_bytes=2),
+                      data.getStream(), echo=True)
             base_y += image.resolution.bits_per_line
-            current_row_nr = int(base_y / image.resolution.bits_per_line)
-            print (f"sending image row {current_row_nr} of {num_vertical_dots / image.resolution.bits_per_line} ({image.resolution.bits_per_line} vert dots)")
-            self.send(BASE, bytes([image.resolution.code]), bigEndian(num_horizontal_dots, width_bytes=2), data.getStream())
 
-            # FIXME: Find out why "zero" is also ok instead of mm_per_line
-            self.feed(mm=0)
+
+            if page:
+                page.nextRow()
+            else:
+                # FIXME: Find out why "zero" is also ok instead of mm_per_line
+                self.feed(mm=0)
+
+        if page:
+            page.finalizePrint()
 
         self.resetFormatting()
 
@@ -350,10 +395,10 @@ class Printer():
 
     def send(self, *argv, echo = False):
         tosend = bytearray()
+        print (f"send({[len(arg) for arg in argv]})")
         maxPrintBinLen = 20
         for binary in argv:
             tosend += binary
-            # print (f"send({len(binary)})")
             if echo:
                 for b in binary[:maxPrintBinLen]:
                     print (f"{b:02X} ", end='')
