@@ -21,6 +21,11 @@ def printImage():
                             choices=densities.keys(),
                             default='dd24')
 
+    parser.add_argument('--no-header',
+                        help="Disable printing name and date",
+                        action='store_true',
+                        )
+
     args = parser.parse_args()
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -29,9 +34,10 @@ def printImage():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((args.ip, args.port))
         p = Printer(s)
-        p.println(SMALLFONT, Just.CENTER, now)
-        p.println(BIGFONT, img.name)
-        p.feed()
+        if not args.no_header:
+            p.println(SMALLFONT, Just.CENTER, now)
+            p.println(BIGFONT, img.name)
+            p.feed()
         p.printImage(img)
         p.cut()
 
