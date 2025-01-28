@@ -40,6 +40,18 @@ def printImage():
                         action='store_true',
                         )
 
+    parser.add_argument('--brightness',
+                        help="Change brightness as ratio. '1' results in no effect.",
+                        type=float,
+                        nargs="?",
+                        )
+
+    parser.add_argument('--contrast',
+                        help="Change contrast as ratio. '1' results in no effect.",
+                        type=float,
+                        nargs="?",
+                        )
+
     parser.add_argument('--extra-text',
                         type=str,
                         nargs="*",
@@ -52,7 +64,11 @@ def printImage():
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    img = Printer.Image(args.image, resolution=densities[args.density])
+    img = Printer.Image(args.image,
+                        resolution=densities[args.density],
+                        modify_contrast=args.contrast,
+                        modify_brightness=args.brightness)
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((args.ip, args.port))
         p = Printer(s)

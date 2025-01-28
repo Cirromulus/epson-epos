@@ -205,7 +205,7 @@ class Printer():
             self.printer.print(escape + 'L')
 
         def finalizePrint(self):
-            print ("Page mode: Finalizing")
+            # print ("Page mode: Finalizing")
             self.printer.print(FeedForward)
 
         class Direction:
@@ -219,7 +219,7 @@ class Printer():
 
         def nextRow(self):
             assert(self.mm_per_row > 0)
-            print (f"NextRow: feeding {self.mm_per_row} mm")
+            # print (f"NextRow: feeding {self.mm_per_row} mm")
             self.printer.feed(mm=self.mm_per_row)
 
     def setupPage(self, **kwarg) -> PageMode:
@@ -264,6 +264,8 @@ class Printer():
                      imagepath : str,
                      resolution : Resolution = DD_8,
                      desired_width_ratio = 1,
+                     modify_contrast = None,
+                     modify_brightness = None,
                      export_generated_image = False):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
@@ -276,13 +278,12 @@ class Printer():
                 white_bg.paste(img, (0, 0), img)
                 img = white_bg
 
-            if resolution.vert_dpi > 100:
-                print ("the _24ers tend to be a little dark. Making the image brighter")
-                brightness = 1.1
-                contrast = .7
-                contrasty = PIL.ImageEnhance.Contrast(img).enhance(contrast)
-                brighter = PIL.ImageEnhance.Brightness(contrasty).enhance(brightness)
-                img = brighter
+            if modify_contrast:
+                print (f"Applying image correction: contrast: {modify_contrast}")
+                img = PIL.ImageEnhance.Contrast(img).enhance(modify_contrast)
+            if modify_brightness:
+                print (f"Applying image correction: brightness: {modify_brightness}")
+                img = PIL.ImageEnhance.Brightness(img).enhance(modify_brightness)
 
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
@@ -420,7 +421,7 @@ class Printer():
 
     def send(self, *argv, echo = False):
         tosend = bytearray()
-        print (f"send({[len(arg) for arg in argv]})")
+        # print (f"send({[len(arg) for arg in argv]})")
         maxPrintBinLen = 20000
         for binary in argv:
             tosend += binary
