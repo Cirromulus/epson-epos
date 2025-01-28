@@ -26,6 +26,16 @@ def printImage():
                         action='store_true',
                         )
 
+    parser.add_argument('--no-cut',
+                        help="Disable cutting after finished print",
+                        action='store_true',
+                        )
+
+    parser.add_argument('--extra-text',
+                        type=str,
+                        nargs="*",
+                        help='Print extra text after image. Will newline for every quoted group of text, i.e. 123 "345 678" will produce two lines.')
+
     args = parser.parse_args()
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -39,6 +49,10 @@ def printImage():
             p.println(BIGFONT, img.name)
             p.feed()
         p.printImage(img)
-        p.cut()
+        if args.extra_text:
+            for line in args.extra_text:
+                p.println(Just.CENTER, line)
+        if not args.no_cut:
+            p.cut()
 
 # TODO: interactive!
