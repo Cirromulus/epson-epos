@@ -5,6 +5,7 @@ import PIL.ImageEnhance
 
 import os.path
 import math # wow, for ceil
+import time
 
 
 """TODO:
@@ -46,7 +47,8 @@ SMALLFONT = Font.FONT_B
 BIGFONT = Font.FONT_A
 
 class Cut:
-    BASE = group + 'V'
+    reset = escape + "@" # reset not needed, but seems to make things more stable
+    BASE = reset + group + 'V'
 
     def __init__(self, feed = 1, less = False):
         self.feed = feed
@@ -218,7 +220,10 @@ class Printer():
 
         def finalizePrint(self):
             # print ("Page mode: Finalizing")
+            # Weird, but this helps stability a bit
+            time.sleep(.2)
             self.printer.print(FeedForward)
+            time.sleep(.2)
 
         class Direction:
             upperLeft = 0 # Left to right
@@ -424,6 +429,7 @@ class Printer():
 
         self.print(escape + 'J' + chr(int(round(times * actual_motion_units))))
 
+
     def cut(self, type = defaultCut.FEED_CUT()):
         self.print(type)
 
@@ -439,16 +445,14 @@ class Printer():
             self.socket.sendall(string.encode(self.encoding))
 
     def send(self, *argv, echo = False):
-        tosend = bytearray()
         # print (f"send({[len(arg) for arg in argv]})")
-        maxPrintBinLen = 20000
+        maxPrintBinLen = 2000
         for binary in argv:
-            tosend += binary
             if echo:
                 for b in binary[:maxPrintBinLen]:
                     print (f"{b:02X} ", end='')
                 print ("..." if len(binary) > maxPrintBinLen else "")
-        self.socket.sendall(tosend)
+            self.socket.sendall(binary)
 
     def println(self, *argv):
         self.print(*argv, "\n")
