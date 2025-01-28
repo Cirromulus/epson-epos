@@ -11,7 +11,11 @@ densities = {
 }
 
 def printImage():
-    parser = argparse.ArgumentParser("eposprint")
+    parser = argparse.ArgumentParser(
+            prog="eposprint",
+            description="Sends Images in different formats to Epson EPOS printers through TCP",
+            epilog="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode, without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program")
+
     parser.add_argument("image", help="The image to print", type=str)
     parser.add_argument("ip", help="IP address", type=str)
     parser.add_argument("port", help="EPOS TCP/IP Port", type=int, default=9100, nargs='?')
@@ -23,6 +27,11 @@ def printImage():
 
     parser.add_argument('--no-header',
                         help="Disable printing name and date",
+                        action='store_true',
+                        )
+
+    parser.add_argument('--workaround-24-bug',
+                        help="If you experience non- or half printing images in 24 bit mode, turn this on. It modifies the byte stream to avoid problematic sequences (...?)",
                         action='store_true',
                         )
 
@@ -38,6 +47,9 @@ def printImage():
 
     args = parser.parse_args()
 
+    if args.workaround_24_bug and "24" not in args.density:
+        parser.error(f"Ugly workaround only applies to 24 bit transmissions. You have chosen {args.density}.")
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     img = Printer.Image(args.image, resolution=densities[args.density])
@@ -48,7 +60,7 @@ def printImage():
             p.println(SMALLFONT, Just.CENTER, now)
             p.println(BIGFONT, img.name)
             p.feed()
-        p.printImage(img)
+        p.printImage(img, ugly_workaround=args.workaround_24_bug)
         if args.extra_text:
             for line in args.extra_text:
                 p.println(Just.CENTER, line)

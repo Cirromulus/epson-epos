@@ -298,10 +298,16 @@ class Printer():
             self.resolution = resolution
             self.img = img
 
-    def printImage(self, image : Image):
+    def printImage(self, image : Image, ugly_workaround = False):
         # ASCII ESC * m nL nH d1 ... dk
 
+        def forbidden_byte(byte) -> bool:
+            # (allowed byte) return byte > 6 or byte < 4 produces working result
+            # (allowed byte) len(self.stream) % 3 != 1 or byte > 6 or byte < 4
+            return byte <= 6 and byte >= 4
+
         class Bitconsumer:
+
             def resetByte(self):
                 self.byteoffs = 0
                 self.currentByte = 0
@@ -311,6 +317,11 @@ class Printer():
                 self.resetByte()
 
             def finishByte(self):
+                # DEBUG
+                if ugly_workaround and forbidden_byte(self.currentByte):
+                    print (f"MODIFYING A BYTE for ugly workaround {self.currentByte:02x} -> ", end="")
+                    self.currentByte <<= 1
+                    print (f"{self.currentByte:02x}")
                 self.stream.append(self.currentByte)
                 self.resetByte()
 
