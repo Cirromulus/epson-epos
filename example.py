@@ -34,7 +34,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         p.printImage(img, ugly_workaround=img.resolution.bits_per_line == 24)
         time.sleep(.5)
         p.feed()
-        time.sleep(.5)
+        time.sleep(1)
 
 
     # p.println(Underline.ONE, "Zusammenfassung Geburtstagsgruß", Underline.NONE)

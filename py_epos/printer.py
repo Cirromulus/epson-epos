@@ -24,7 +24,7 @@ INCH_PER_MM = 1 / MM_PER_INCH
 
 def bigEndian(value, width_bytes = 2):
     bytes = bytearray()
-    for byte in range(width_bytes):
+    for _ in range(width_bytes):
         low = value & 0xFF
         bytes.append(low)
         value >>= 8
@@ -223,7 +223,7 @@ class Printer():
             # Weird, but this helps stability a bit
             time.sleep(.2)
             self.printer.print(FeedForward)
-            time.sleep(.2)
+            time.sleep(.5)
 
         class Direction:
             upperLeft = 0 # Left to right
