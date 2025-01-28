@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
 import PIL.Image
+import PIL.ImageEnhance
+
 import os.path
 import math # wow, for ceil
 
@@ -273,6 +275,14 @@ class Printer():
                 white_bg = PIL.Image.new("RGBA", img.size, "WHITE") # Create a white rgba background
                 white_bg.paste(img, (0, 0), img)
                 img = white_bg
+
+            if resolution.vert_dpi > 100:
+                print ("the _24ers tend to be a little dark. Making the image brighter")
+                brightness = 1.1
+                contrast = .7
+                contrasty = PIL.ImageEnhance.Contrast(img).enhance(contrast)
+                brighter = PIL.ImageEnhance.Brightness(contrasty).enhance(brightness)
+                img = brighter
 
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
