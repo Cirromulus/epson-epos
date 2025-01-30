@@ -23,3 +23,4 @@ Future Ideas:
 - Live writing
 - Markdown converter
 - Linux Terminal forwarding?
+- [Telegram bot](https://github.com/Cirromulus/epson-epos-telegram-bot)
