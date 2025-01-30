@@ -261,7 +261,7 @@ class Printer():
 
 
         def __init__(self,
-                     imagepath : str,
+                     image : str,   # or may be ByteIO
                      resolution : Resolution = DD_8,
                      desired_width_ratio = 1,
                      modify_contrast = None,
@@ -269,8 +269,12 @@ class Printer():
                      export_generated_image = False):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
-            print (f"Image: Opening {imagepath}")
-            img = PIL.Image.open(imagepath) # open colour image
+            if isinstance(image, str):
+                print (f"Image: Opening {image}")
+            else:
+                print (f"Image: Opening {type(image)}")
+
+            img = PIL.Image.open(image) # open colour image
 
             if Printer.Image.has_transparency(img):
                 print (f"Image has transparency. Replacing that with white.")
@@ -292,8 +296,8 @@ class Printer():
             print (f"Image: Scaling from {img.size} to {scaled_size}")
             img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
             img = img.convert('1') # convert image to black and white
-            self.name = os.path.basename(imagepath)
             if export_generated_image:
+                self.name = os.path.basename(imagepath)
                 img.save(f'intended_image_{self.name}.png')
 
             self.resolution = resolution
