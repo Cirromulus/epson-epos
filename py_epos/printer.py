@@ -450,6 +450,30 @@ class Printer():
     def println(self, *argv):
         self.print(*argv, "\n")
 
+    def getStatus(self):
+        class Status():
+            def __init__(self, status, byte):
+                self.status = status
+                self.byte = byte
+            def __str__(self):
+                msg = f"{self.byte:08b}:"
+                if self.status == 1:
+                    if self.byte & 0b11 != 0b10:
+                        msg += " Fixed bytes incorrect"
+                    msg += "\n\tkickout: "
+                    msg += "high" if self.byte & 0x04 else "low"
+                    msg += "\n\tonline: "
+                    msg += "yes" if self.byte & 0x08 else "no"
+                    # TODO: Others
+                return msg
+
+
+        BASE = bytes([16, 4])
+        status = 1
+        self.socket.sendall(BASE + bytes([status]))
+        response = self.socket.recv(1)[0]
+        return Status(status, response)
+
 
 class Barcode:
     JAN8 = 2
