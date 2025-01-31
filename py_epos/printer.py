@@ -6,6 +6,18 @@ import PIL.ImageEnhance
 import os.path
 import math # wow, for ceil
 
+
+"""TODO:
+IS PERHAPS THE REALTIME COMMAND THE PROBLEM FOR BUG!?
+
+"It is recommended to disable this function with GS ( D as it is possible
+that data such as graphics or downloaded text might accidentally
+include a data string corresponding to this function.
+(The default for GS ( D of this function is "Enabled".) "
+
+https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/realtime_commands.html
+"""
+
 MM_PER_INCH = 25.4
 INCH_PER_MM = 1 / MM_PER_INCH
 
