@@ -451,28 +451,51 @@ class Printer():
         self.print(*argv, "\n")
 
     def getStatus(self):
+
         class Status():
+            class Type:
+                GENERAL = 1
+                OFFLINE_CAUSE = 2
+                ERROR_CAUSE = 3
+                PAPER_ROLL = 4
+
             def __init__(self, status, byte):
                 self.status = status
                 self.byte = byte
+
             def __str__(self):
-                msg = f"{self.byte:08b}:"
-                if self.status == 1:
-                    if self.byte & 0b11 != 0b10:
-                        msg += " Fixed bytes incorrect"
+                msg = f"{self.status}: {self.byte:08b} -> "
+                # FIXME: Bad SW design
+                if self.byte & 0b11 != 0b10:
+                    msg += " Fixed bytes incorrect!"
+
+                if self.status == Status.Type.GENERAL:
+                    msg += "GENERAL:"
                     msg += "\n\tkickout: "
                     msg += "high" if self.byte & 0x04 else "low"
                     msg += "\n\tonline: "
                     msg += "yes" if self.byte & 0x08 else "no"
-                    # TODO: Others
+                if self.status == Status.Type.OFFLINE_CAUSE:
+                    msg += "Offline cause. TODO."
+                if self.status == Status.Type.ERROR_CAUSE:
+                    msg += "Error cause. TODO."
+                if self.status == Status.Type.PAPER_ROLL:
+                    msg += "Paper Roll status."
+                    msg += "\n\tNear-End Sensor:"
+                    msg += "near-end" if self.byte & 0x04 else "adequate"
+                    msg += "\n\tActual End Sensor: paper "
+                    msg += "not present" if self.byte & 0x40 else "present"
                 return msg
 
-
         BASE = bytes([16, 4])
-        status = 1
-        self.socket.sendall(BASE + bytes([status]))
-        response = self.socket.recv(1)[0]
-        return Status(status, response)
+
+        def getSingle(type) -> Status:
+            self.socket.sendall(BASE + bytes([type]))
+            response = self.socket.recv(1)[0]
+            return Status(type, response)
+
+        requested_stati = [Status.Type.GENERAL, Status.Type.PAPER_ROLL]
+        return [getSingle(s) for s in requested_stati]
 
 
 class Barcode:
