@@ -282,9 +282,10 @@ class Printer():
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             if isinstance(image, str):
-                print (f"Image: Opening {image}")
+                self.name = image
             else:
-                print (f"Image: Opening {type(image)}")
+                self.name = type(image)
+            print (f"Image: Opening {self.name}")
 
             img = PIL.Image.open(image) # open colour image
 
@@ -309,8 +310,7 @@ class Printer():
             img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
             img = img.convert('1') # convert image to black and white
             if export_generated_image:
-                self.name = os.path.basename(imagepath)
-                img.save(f'intended_image_{self.name}.png')
+                img.save(f'intended_image_{os.path.basename(image)}.png')
 
             self.resolution = resolution
             self.img = img
@@ -358,6 +358,9 @@ class Printer():
         BASE = bytes([ord(escape), ord('*')])
 
         # self.print(Unidirectional(True))    # is suggested to avoid spacings between lines, but has no effect
+        # If graphics data includes a data string matching DLE DC4 (fn = 1 or 2),
+        # it is recommended to use this command in advance to disable the Real-time commands. (DUH!!!)
+        self.enableRealtimeCommands(False)
 
         num_horizontal_dots = image.img.size[0]
         num_vertical_dots = image.img.size[1]
@@ -451,7 +454,6 @@ class Printer():
         self.print(*argv, "\n")
 
     def getStatus(self):
-
         class Status():
             class Type:
                 GENERAL = 1
@@ -494,8 +496,30 @@ class Printer():
             response = self.socket.recv(1)[0]
             return Status(type, response)
 
+        self.enableRealtimeCommands(True) # this is a realtime-command.
+
         requested_stati = [Status.Type.GENERAL, Status.Type.PAPER_ROLL]
         return [getSingle(s) for s in requested_stati]
+
+    def enableRealtimeCommands(self, enable = True):
+        # This resets at ESC @.
+        BASE = bytes([0x1D, ord("("), ord("D")])
+        m = bytes([0x14]) # don't ask me why it is that way! Documentation says nothing about it.
+        types = {
+            "GENERATE_PULSE": 1,
+            "POWER_OFF_SEQUENCE": 2,
+            # no more in T88IV
+        }
+        onoff = 1 if enable else 0
+
+        payload = bytearray()
+        for val in types.values():
+            payload.append(val)
+            payload.append(onoff)
+
+
+        encoded_len = bigEndian(1 + len(payload), width_bytes=2) # + 1 because of "m"
+        self.send(BASE, encoded_len, m, payload)
 
 
 class Barcode:
