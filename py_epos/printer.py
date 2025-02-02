@@ -457,53 +457,83 @@ class Printer():
     def println(self, *argv):
         self.print(*argv, "\n")
 
-    def getStatus(self):
-        class Status():
-            class Type:
-                GENERAL = 1
-                OFFLINE_CAUSE = 2
-                ERROR_CAUSE = 3
-                PAPER_ROLL = 4
+    # TODO: Get this "status" group somewhat encapsulated
 
-            def __init__(self, status, byte):
-                self.status = status
-                self.byte = byte
+    class Status():
+        def __init__(self, byte):
+            self.byte = byte
 
-            def __str__(self):
-                msg = f"{self.status}: {self.byte:08b} -> "
-                # FIXME: Bad SW design
-                if self.byte & 0b11 != 0b10:
-                    msg += " Fixed bytes incorrect!"
+        def __str__(self):
+            msg = f"{self.byte:08b} -> "
+            if self.byte & 0b11 != 0b10:
+                msg += " Fixed bytes incorrect!"
+            return msg
 
-                if self.status == Status.Type.GENERAL:
-                    msg += "GENERAL:"
-                    msg += "\n\tkickout: "
-                    msg += "high" if self.byte & 0x04 else "low"
-                    msg += "\n\tonline: "
-                    msg += "yes" if self.byte & 0x08 else "no"
-                if self.status == Status.Type.OFFLINE_CAUSE:
-                    msg += "Offline cause. TODO."
-                if self.status == Status.Type.ERROR_CAUSE:
-                    msg += "Error cause. TODO."
-                if self.status == Status.Type.PAPER_ROLL:
-                    msg += "Paper Roll status."
-                    msg += "\n\tNear-End Sensor:"
-                    msg += "near-end" if self.byte & 0x04 else "adequate"
-                    msg += "\n\tActual End Sensor: paper "
-                    msg += "not present" if self.byte & 0x40 else "present"
-                return msg
+    class General(Status):
+        VALUE = 1
 
+        def getKickout(self) -> bool:
+            return self.byte & 0x04
+
+        def isOnline(self) -> bool:
+            return self.byte & 0x08
+
+        def __str__(self):
+            msg = super().__str__()
+            msg += "GENERAL:"
+            msg += "\n\tkickout: "
+            msg += "high" if self.getKickout() else "low"
+            msg += "\n\tonline: "
+            msg += "yes" if self.isOnline() else "no"
+            return msg
+
+    class Offline(Status):
+        VALUE = 2
+        # TODO
+        def __str__(self):
+            return super().__str__() + "Offline cause TODO"
+
+    class Error(Status):
+        VALUE = 3
+        # TODO
+        def __str__(self):
+            return super().__str__() + "Error cause TODO"
+
+    class Paper(Status):
+        VALUE = 4
+
+        def isNearEnd(self) -> bool:
+            return self.byte & 0x04
+
+        def isPresent(self) -> bool:
+            return self.byte & 0x40
+
+        def __str__(self):
+            msg = super().__str__()
+            msg += "Paper Roll status."
+            msg += "\n\tNear-End Sensor: "
+            msg += "near-end" if self.isNearEnd() else "adequate"
+            msg += "\n\tActual End Sensor: paper "
+            msg += "not present" if self.isPresent() else "present"
+            return msg
+
+    def getStatus(self, requested_stati : list[object] = None) -> dict[object, Status]:
         BASE = bytes([16, 4])
 
-        def getSingle(type) -> Status:
-            self.socket.sendall(BASE + bytes([type]))
+        def getSingle(type : object) -> Printer.Status:
+
+            self.socket.sendall(BASE + bytes([type.VALUE]))
             response = self.socket.recv(1)[0]
-            return Status(type, response)
+            return type(response)
 
         self.enableRealtimeCommands(True) # this is a realtime-command.
 
-        requested_stati = [Status.Type.GENERAL, Status.Type.PAPER_ROLL]
-        return [getSingle(s) for s in requested_stati]
+        if not requested_stati:
+            requested_stati = [
+                Printer.General,
+                Printer.Paper
+            ]
+        return {s : getSingle(s) for s in requested_stati}
 
     def enableRealtimeCommands(self, enable = True):
         # This resets at ESC @.
