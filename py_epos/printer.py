@@ -320,8 +320,10 @@ class Printer():
             self.resolution = resolution
             self.img = img
 
-    def printImage(self, image : Image, ugly_workaround = False):
+    def printImage(self, image : Image, ugly_workaround = None):
         # ASCII ESC * m nL nH d1 ... dk
+        if not ugly_workaround:
+            ugly_workaround = image.resolution.bits_per_line == 24
 
         def forbidden_byte(byte) -> bool:
             # (allowed byte) return byte > 6 or byte < 4 produces working result
@@ -329,7 +331,6 @@ class Printer():
             return byte <= 6 and byte >= 4
 
         class Bitconsumer:
-
             def resetByte(self):
                 self.byteoffs = 0
                 self.currentByte = 0
@@ -427,8 +428,12 @@ class Printer():
         else:
             actual_motion_units = mm * self.getCurrentMotionUnitPerMM()[1]
 
-        self.print(escape + 'J' + chr(int(round(times * actual_motion_units))))
-
+        BASE = bytes([ord(escape), ord("J")])
+        motion = int(round(times * actual_motion_units))
+        if motion > 0xFF:
+            print (f"Warn: requested motion of {mm}mm * {times} overflows motion ({motion})")
+            motion = 0xFF
+        self.send(BASE, bytes([motion]))
 
     def cut(self, type = defaultCut.FEED_CUT()):
         self.print(type)
@@ -533,7 +538,9 @@ class Printer():
                 Printer.General,
                 Printer.Paper
             ]
-        return {s : getSingle(s) for s in requested_stati}
+        ret = {s : getSingle(s) for s in requested_stati}
+        self.enableRealtimeCommands(False)
+        return ret
 
     def enableRealtimeCommands(self, enable = True):
         # This resets at ESC @.
