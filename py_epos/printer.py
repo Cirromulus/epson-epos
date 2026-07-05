@@ -4,7 +4,7 @@ import PIL.Image
 import PIL.ImageEnhance
 
 import os.path
-import math # wow, for ceil
+from math import ceil, isclose
 import time
 
 
@@ -143,6 +143,11 @@ class Printer():
         function = 50
         self.send(BASE.encode(self.encoding), command, bytes([function + speed]))
 
+    def fillLine(self, char = '-', font = SMALLFONT):
+        if len(char) == 0:
+            char = ' '
+        self.println(font, int((Printer.getMaxCharacterWidth(font) / len(char))) * char)
+
     def setCodePage(self):
         # todo: actual parameter
         self.print(Printer.CodeTable.SET_NORDIC)
@@ -163,6 +168,54 @@ class Printer():
         # print (f"set current motion unit: {self.currentMotionUnit} (1 inch / x)")
         self.send(bytes([ord(group), ord("P"), desired_units_per_inch, desired_units_per_inch]))
 
+    class TypeSet:
+        def __init__(self, printer, font = SMALLFONT):
+            self.currentLinePos = 0
+            self.printer = printer
+            self.font = font
+        
+        def next(str):
+            pass
+
+    def typeSet(self, *strings, font = SMALLFONT):
+        linebreak = Printer.getMaxCharacterWidth(font)
+        self.print(font)
+        currentLinePos = 0
+        for i, string in enumerate(strings):
+            print(".".join(hex(ord(c))[2:] for c in string), end=" ")
+            if escape in string:
+                # continue without inserting spaces or newlines
+                print ("is (contains) markup")
+                self.print(string)
+                continue
+            # else
+            print ("is printable")
+            if len(string) == 0:
+                print ("Manual add of a space if auto-generation would destroy markup")
+                if 1 + currentLinePos > linebreak:
+                    self.println()
+                    currentLinePos = 0
+                else:
+                    self.print(' ')
+                    currentLinePos += 1
+            else:
+                for j, word in enumerate(string.split(' ')):
+                    print (word, end=" ")
+                    if len(word) + currentLinePos > linebreak:
+                        print (f"would spill ({len(word)} + {currentLinePos} > {linebreak}), newline")
+                        self.println()
+                        currentLinePos = 0
+                    if currentLinePos != 0:
+                        if i > 0 and j == 0 and escape in strings[i - 1]:
+                            print ("prev string contained markup. Not emtting space! Add it manually, sorry!")
+                        else:
+                            print ("not first in line, so space")
+                            self.print(' ')
+                            currentLinePos += 1
+                    self.print(word)
+                    currentLinePos += len(word)
+        self.println()
+
     class List:
         def __init__(self, printer, font = BIGFONT):
             self.items = []
@@ -170,20 +223,101 @@ class Printer():
             self.font = font
 
         def addItem(self, nameleft, thingright):
-            self.items.append([nameleft, thingright])
+            self.items.append([str(nameleft), str(thingright)])
+        
+        def addLine(self, underline = False):
+            # lol, python!
+            self.items.append((underline, None))
 
         def print(self):
             self.printer.resetFormatting()
             self.printer.print(self.font)
             width = Printer.getMaxCharacterWidth(self.font)
-            maxWidthRight = max([len(right) for (_, right) in self.items])
+            maxWidthRight = max([len(right) for (_, right) in self.items if right is not None])
             self.printer.setHorizontalTabPos(width - maxWidthRight)
             for (left, right) in self.items:
-                self.printer.println(Just.LEFT, Emph.ON, left, Emph.OFF, Tab,
+                if right is None:
+                    if left: # underline
+                        self.printer.print(Underline.TWO)
+                        self.printer.fillLine('', font=self.font)
+                        self.printer.print(Underline.NONE)
+                    else:
+                        self.printer.fillLine('-', font=self.font)
+                else:
+                    self.printer.println(Just.LEFT, Emph.ON, left, Emph.OFF, Tab,
                                         right.rjust(maxWidthRight))
+            self.printer.resetFormatting()
 
     def newList(self, *args, **kwargs):
         return Printer.List(self, *args, **kwargs)
+
+    class Table:
+        def __init__(self, printer, font = SMALLFONT):
+            self.rows = []
+            self.printer = printer
+            self.font = font
+        
+        def addRow(self, *cols):
+            self.rows.append([*cols])
+        
+        def print(self, alignWidth = False):
+            colWidths = []
+            for row in self.rows:
+                for i, col in enumerate(row):
+                    if i >= len(colWidths):
+                        colWidths.append(0)
+                    colWidths[i] = max(colWidths[i], len(col))
+
+            remainingChars = Printer.getMaxCharacterWidth(self.font) - sum(colWidths)
+            if remainingChars < 0:
+                print (f"Warn: Table does not fit on paper ({abs(remainingChars)}) missing")
+                remainingChars = 0
+            
+            numBorders = len(colWidths) - 1
+            spacePerCol = int(remainingChars / numBorders)
+            overflow = remainingChars - (spacePerCol * numBorders)
+            if alignWidth:
+                for i in range(numBorders, 0, -1):
+                    colWidths.insert(i, spacePerCol + overflow)
+                    for row in self.rows:
+                        row.insert(i, '')
+                    overflow = 0
+
+            def cumsum(l):
+                s = 0
+                r = []
+                for i in l:
+                    s += i
+                    r.append(s)
+                return r
+
+            # don't use last tab because we use only the borders!
+            tabPositions = cumsum([w for w in colWidths])[:-1]
+
+            print ("rows:")
+            print (self.rows)
+            print ("Tab positions at:")
+            print (tabPositions)
+
+            self.printer.print(self.font)
+            self.printer.setHorizontalTabPos(*tabPositions)
+            for i, row in enumerate(self.rows):
+                if i == 0:
+                    self.printer.print(Emph.ON)
+                if i == 1:
+                    self.printer.print(Emph.OFF)
+                for j, item in enumerate(row):
+                    # Tab never "stays" if the current position
+                    # is exactly where the next tab would start.
+                    if j > 0 and len(item) < colWidths[j]:
+                        self.printer.print(Tab)
+                    self.printer.print(item)
+                self.printer.println()
+
+            self.printer.resetFormatting()
+    
+    def newTable(self, *args, **kwargs):
+        return Printer.Table(self, *args, **kwargs)
 
     class PageMode:
         def __init__(self, printer, size_hor_mm, size_vert_mm, mm_per_row = 0, origin_x_mm = 0, origin_y_mm = 0, resolution = .125):
@@ -285,7 +419,6 @@ class Printer():
                      modify_brightness = None,
                      export_generated_image = False):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
-            height_stretch_ratio = resolution.hor_dpi / resolution.vert_dpi # higher number for higher stretching
             if isinstance(image, str):
                 self.name = image
             else:
@@ -293,7 +426,7 @@ class Printer():
             print (f"Image: Opening {self.name}")
 
             img = PIL.Image.open(image) # open colour image
-
+            
             if Printer.Image.has_transparency(img):
                 print (f"Image has transparency. Replacing that with white.")
                 white_bg = PIL.Image.new("RGBA", img.size, "WHITE") # Create a white rgba background
@@ -307,13 +440,24 @@ class Printer():
                 print (f"Applying image correction: brightness: {modify_brightness}")
                 img = PIL.ImageEnhance.Brightness(img).enhance(modify_brightness)
 
+            orig_dpi = img.info['dpi']
+            orig_dpi_ratio = orig_dpi[0] / orig_dpi[1]
+            print (f"Image original density ratio {orig_dpi[0]}X / {orig_dpi[1]}Y: {orig_dpi_ratio}")
+            # higher number for higher stretching
+            desired_dpi_ratio = resolution.hor_dpi / resolution.vert_dpi
+            print (f"Printer density ratio {resolution.hor_dpi}X / {resolution.vert_dpi}Y: {desired_dpi_ratio}")
+            height_stretch_ratio =  orig_dpi_ratio / desired_dpi_ratio
+            print (f"Stretching factor: {height_stretch_ratio}")
+
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
             scaled_size = (desired_width, hsize)
             print (f"Image: {resolution}")
-            print (f"Image: Scaling from {img.size} to {scaled_size}")
-            img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
-            img = img.convert('1') # convert image to black and white
+            if not isclose(scaled_size[0], img.size[0]) or not isclose(scaled_size[1], img.size[1]):
+                print (f"Image: Scaling from {img.size} to {scaled_size}")
+                img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
+            if len(img.getcolors()) > 2:
+                img = img.convert('1') # convert image to black and white
             if export_generated_image:
                 img.save(f'intended_image_{os.path.basename(image)}.png')
 
@@ -380,7 +524,7 @@ class Printer():
             size_hor_mm = (num_horizontal_dots + error) / image.resolution.hor_dpi * MM_PER_INCH
             mm_per_row = ((image.resolution.bits_per_line + error) / image.resolution.vert_dpi) * MM_PER_INCH
             # .. page mode needs rounding up to full row
-            size_vert_mm = math.ceil(needed_rows) * mm_per_row
+            size_vert_mm = ceil(needed_rows) * mm_per_row
             page = self.setupPage(size_hor_mm=size_hor_mm, size_vert_mm=size_vert_mm,
                                   mm_per_row=mm_per_row, resolution= (1 / image.resolution.vert_dpi) * MM_PER_INCH)
 
@@ -438,6 +582,7 @@ class Printer():
     def cut(self, type = defaultCut.FEED_CUT()):
         self.print(type)
 
+    # for sending characters
     def print(self, *argv, echo= False):
         for string in argv:
             if echo:
@@ -449,6 +594,7 @@ class Printer():
                     print()
             self.socket.sendall(string.encode(self.encoding))
 
+    # For sending binary data.
     def send(self, *argv, echo = False):
         # print (f"send({[len(arg) for arg in argv]})")
         maxPrintBinLen = 2000
@@ -567,7 +713,7 @@ class Barcode:
     JAN8 = 2
     CODE39 = 4  # d = 48 – 57, 65 – 90, 32, 36, 37, 42, 43, 45, 46, 47
 
-    def Setup(height=50):
+    def setup(height=50):
         setHeight = group + 'h' + chr(height)
         setHriCharacterPos = group + 'H' + chr(2)   # 2: Below
         setHriCharacterFont = group + 'f' + chr(1) # font B
