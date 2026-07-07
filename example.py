@@ -30,8 +30,8 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             print (status)
         time.sleep(1)
 
-    # p.typeSet("Wenn Sie eine Rückmeldung bis zum", '', # manual space
-    #         Underline.ONE, "15.10.26", Underline.NONE,
+    # p.typeSet("Wenn Sie eine Rückmeldung bis zum",
+    #         Underline.ONE + "15.10.26" + Underline.NONE,
     #         "einreichen und am Aktionstag mit warmen Klamotten erscheinen,",
     #         "haben Sie die Chance auf eine von zwei unvergesslichen Feiern!",
     #         font=BIGFONT)

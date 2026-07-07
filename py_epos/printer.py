@@ -177,43 +177,43 @@ class Printer():
         def next(str):
             pass
 
+    # Use a `+` to join markup with text to supress space!
     def typeSet(self, *strings, font = SMALLFONT):
-        linebreak = Printer.getMaxCharacterWidth(font)
+        LINEBREAK = Printer.getMaxCharacterWidth(font)
         self.print(font)
+
         currentLinePos = 0
-        for i, string in enumerate(strings):
-            print(".".join(hex(ord(c))[2:] for c in string), end=" ")
-            if escape in string:
-                # continue without inserting spaces or newlines
-                print ("is (contains) markup")
-                self.print(string)
-                continue
-            # else
-            print ("is printable")
-            if len(string) == 0:
-                print ("Manual add of a space if auto-generation would destroy markup")
-                if 1 + currentLinePos > linebreak:
-                    self.println()
-                    currentLinePos = 0
-                else:
-                    self.print(' ')
-                    currentLinePos += 1
-            else:
-                for j, word in enumerate(string.split(' ')):
-                    print (word, end=" ")
-                    if len(word) + currentLinePos > linebreak:
-                        print (f"would spill ({len(word)} + {currentLinePos} > {linebreak}), newline")
-                        self.println()
-                        currentLinePos = 0
-                    if currentLinePos != 0:
-                        if i > 0 and j == 0 and escape in strings[i - 1]:
-                            print ("prev string contained markup. Not emtting space! Add it manually, sorry!")
-                        else:
-                            print ("not first in line, so space")
-                            self.print(' ')
-                            currentLinePos += 1
-                    self.print(word)
-                    currentLinePos += len(word)
+        def lenWithoutMarkup(something):
+            # ignoring two-byte commands like `cut`
+            # and perhaps others, lol?
+            if Tab in something:
+                print ("Tab in typeSet is practially impossible, expect formatting issues.")
+            return len(something) - something.count(escape) * 3
+
+        def printTracked(item):
+            nonlocal currentLinePos
+            self.print(item)
+            currentLinePos += lenWithoutMarkup(item)
+        def newLine():
+            nonlocal currentLinePos
+            self.println()
+            currentLinePos = 0
+
+        # joined strings with spaces, and exploded without duplicated spaces
+        words = filter(len, ' '.join(strings).split(' '))
+        for wordIndex, word in enumerate(words):
+            print(".".join(c if c.isprintable() else hex(ord(c))[2:] for c in word), end=" ")
+            print (f"\t {currentLinePos}-{len(word) + currentLinePos} of {LINEBREAK}")
+            def shouldEmitSpaceFirst():
+                return currentLinePos != 0 and (wordIndex > 0)
+            spaces = 1 if shouldEmitSpaceFirst() else 0
+
+            if spaces + lenWithoutMarkup(word) + currentLinePos > LINEBREAK:
+                print (f"would spill ({lenWithoutMarkup(word)} + {currentLinePos} > {LINEBREAK}), newline")
+                newLine()
+            elif shouldEmitSpaceFirst():
+                printTracked(' ')
+            printTracked(word)
         self.println()
 
     class List:
@@ -459,7 +459,8 @@ class Printer():
             if len(img.getcolors()) > 2:
                 img = img.convert('1') # convert image to black and white
             if export_generated_image:
-                img.save(f'intended_image_{os.path.basename(image)}.png')
+                img.save(f'intended_image_{os.path.basename(image)}.png',
+                         dpi=(resolution.hor_dpi, resolution.vert_dpi))
 
             self.resolution = resolution
             self.img = img
