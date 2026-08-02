@@ -2,6 +2,7 @@
 
 import PIL.Image
 import PIL.ImageEnhance
+# from wand.image import Image as wimage
 
 import os.path
 from math import ceil, isclose
@@ -423,7 +424,7 @@ class Printer():
                 self.name = image
             else:
                 self.name = type(image)
-            print (f"Image: Opening {self.name}")
+            print (f"Image: Opening '{self.name}'")
 
             img = PIL.Image.open(image) # open colour image
             
@@ -452,7 +453,8 @@ class Printer():
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
             scaled_size = (desired_width, hsize)
-            print (f"Image: {resolution}")
+            print (f"Image  : {orig_dpi}")
+            print (f"Desired: {resolution}")
             if not isclose(scaled_size[0], img.size[0]) or not isclose(scaled_size[1], img.size[1]):
                 print (f"Image: Scaling from {img.size} to {scaled_size}")
                 img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)

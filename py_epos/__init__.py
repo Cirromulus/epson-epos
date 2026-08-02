@@ -2,6 +2,7 @@ from .printer import *
 import socket
 from datetime import datetime
 import argparse
+from sys import stdin
 
 densities = {
     'sd8' : Printer.Image.SD_8,
@@ -10,13 +11,7 @@ densities = {
     'dd24' : Printer.Image.DD_24,
 }
 
-def printImage():
-    parser = argparse.ArgumentParser(
-            prog="eposprint",
-            description="Sends Images in different formats to Epson EPOS printers through TCP",
-            epilog="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode, without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program")
-
-    parser.add_argument("image", help="The image to print", type=str)
+def addDefaultArguments(parser: argparse.ArgumentParser):
     parser.add_argument("ip", help="IP address", type=str)
     parser.add_argument("port", help="EPOS TCP/IP Port", type=int, default=9100, nargs='?')
 
@@ -24,16 +19,6 @@ def printImage():
                             help='The bit resolution density.',
                             choices=densities.keys(),
                             default='dd24')
-
-    parser.add_argument('--no-header',
-                        help="Disable printing name and date",
-                        action='store_true',
-                        )
-
-    parser.add_argument('--workaround-24-bug',
-                        help="If you experience non- or half printing images in 24 bit mode, turn this on. It modifies the byte stream to avoid problematic sequences (...?)",
-                        action='store_true',
-                        )
 
     parser.add_argument('--no-cut',
                         help="Disable cutting after finished print",
@@ -50,6 +35,25 @@ def printImage():
                         help="Change contrast as ratio. '1' results in no effect.",
                         type=float,
                         nargs="?",
+                        )
+
+def printImage():
+    parser = argparse.ArgumentParser(
+            prog="eposprint",
+            description="Sends Images in different formats to Epson EPOS printers through TCP")
+
+    addDefaultArguments(parser)
+
+    parser.add_argument("image", help="The image to print", type=str)
+
+    parser.add_argument('--no-header',
+                        help="Disable printing name and date",
+                        action='store_true',
+                        )
+
+    parser.add_argument('--workaround-24-bug',
+                        help="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program",
+                        action='store_true',
                         )
 
     parser.add_argument('--extra-text',
@@ -83,4 +87,33 @@ def printImage():
         if not args.no_cut:
             p.cut()
 
-# TODO: interactive!
+def interactiveText():
+    parser = argparse.ArgumentParser(
+            prog="epostext",
+            description="\"Typesets\" text to Epson EPOS printers through TCP")
+    
+    addDefaultArguments(parser)
+
+    parser.add_argument('--font',
+                help="Font type. A is bigger than B.",
+                choices=['A', 'B'],
+                default='A'
+                )
+  
+    args = parser.parse_args()
+    font = Font.FONT_A
+    if args.font.lower() == 'b':
+        font = Font.FONT_B
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((args.ip, args.port))
+        p = Printer(s)
+
+        print ("Connected. Exit with Ctrl-D.")
+
+        for line in stdin:
+            p.typeSet(line.rstrip(), font=font)
+
+        if not args.no_cut:
+            p.cut()
+

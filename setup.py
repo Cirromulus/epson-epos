@@ -14,6 +14,7 @@ setup(
     entry_points={
         'console_scripts': [
             'eposprint = py_epos:printImage',
+            'epostext = py_epos:interactiveText'
         ]
     },
 )
