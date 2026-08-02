@@ -56,14 +56,17 @@ def printImage():
 
     parser.add_argument('--workaround-24-bug',
                         help="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program",
-                        # action='store_true',
-                        default=True
+                        default=True,
                         )
 
     parser.add_argument('--extra-text',
                         type=str,
                         nargs="*",
                         help='Print extra text after image. Will newline for every quoted group of text, i.e. 123 "345 678" will produce two lines.')
+
+    parser.add_argument('--auto-rotate',
+                        action='store_true',
+                        help='Rotate images to always be in portrait mode to increase print size')
 
     args = parser.parse_args()
 
@@ -90,9 +93,12 @@ def printImage():
                                 modify_contrast=args.contrast,
                                 modify_brightness=args.brightness,
                                 name=path.basename(imagepath + f"_{i}")))
-                    
         else:
-            images.append(Printer.Image(imagepath,
+            image = PIL.Image.open(imagepath)
+            if args.auto_rotate and image.size[0] > image.size[1]:
+                print ("Image is landscape, auto-rotating for portrait")
+                image = image.rotate(90, expand=True)
+            images.append(Printer.Image(image,
                                 resolution=densities[args.density],
                                 modify_contrast=args.contrast,
                                 modify_brightness=args.brightness))

@@ -414,7 +414,7 @@ class Printer():
 
 
         def __init__(self,
-                     image : Union[str, BytesIO],
+                     image : Union[str, PIL.Image.Image, BytesIO],
                      resolution : Resolution = DD_8,
                      desired_width_ratio = 1,
                      modify_contrast = None,
@@ -428,7 +428,9 @@ class Printer():
                 self.name = name or str(type(image))
             print (f"Image: Opening '{self.name}'")
 
-            img = PIL.Image.open(image) # open colour image
+            img = image
+            if not isinstance(image, PIL.Image.Image):
+                img = PIL.Image.open(image) # open colour image
             
             if Printer.Image.has_transparency(img):
                 print (f"Image has transparency. Replacing that with white.")
