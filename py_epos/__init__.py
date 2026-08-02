@@ -3,6 +3,9 @@ import socket
 from datetime import datetime
 import argparse
 from sys import stdin
+from wand.image import Image as wimage
+from io import BytesIO
+from os import path
 
 densities = {
     'sd8' : Printer.Image.SD_8,
@@ -44,7 +47,7 @@ def printImage():
 
     addDefaultArguments(parser)
 
-    parser.add_argument("image", help="The image to print", type=str)
+    parser.add_argument("file", help="The image / PDF to print", type=str, nargs='+')
 
     parser.add_argument('--no-header',
                         help="Disable printing name and date",
@@ -53,7 +56,8 @@ def printImage():
 
     parser.add_argument('--workaround-24-bug',
                         help="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program",
-                        action='store_true',
+                        # action='store_true',
+                        default=True
                         )
 
     parser.add_argument('--extra-text',
@@ -68,19 +72,42 @@ def printImage():
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    img = Printer.Image(args.image,
-                        resolution=densities[args.density],
-                        modify_contrast=args.contrast,
-                        modify_brightness=args.brightness)
+    images = []
+
+    for imagepath in args.file:
+        if imagepath.endswith('.pdf'):
+            with wimage(filename=imagepath,
+                        resolution=(densities[args.density].hor_dpi, densities[args.density].vert_dpi),
+                        ) as img:
+                for i, page in enumerate(img.sequence):
+                    page_rendered = wimage(page).make_blob(format="png")
+
+                    # with open("page.png", "wb") as f:
+                    #     f.write(BytesIO(page_rendered).getbuffer())
+                    
+                    images.append(Printer.Image(BytesIO(page_rendered),
+                                resolution=densities[args.density],
+                                modify_contrast=args.contrast,
+                                modify_brightness=args.brightness,
+                                name=path.basename(imagepath + f"_{i}")))
+                    
+        else:
+            images.append(Printer.Image(imagepath,
+                                resolution=densities[args.density],
+                                modify_contrast=args.contrast,
+                                modify_brightness=args.brightness))
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((args.ip, args.port))
         p = Printer(s)
         if not args.no_header:
             p.println(SMALLFONT, Just.CENTER, now)
-            p.println(BIGFONT, img.name)
+            for file in args.file:
+                p.println(BIGFONT, path.basename(file))
             p.feed()
-        p.printImage(img, ugly_workaround=args.workaround_24_bug)
+
+        for img in images:
+            p.printImage(img, ugly_workaround=args.workaround_24_bug)
         if args.extra_text:
             for line in args.extra_text:
                 p.println(Just.CENTER, line)
@@ -116,4 +143,3 @@ def interactiveText():
 
         if not args.no_cut:
             p.cut()
-

@@ -2,11 +2,12 @@
 
 import PIL.Image
 import PIL.ImageEnhance
-# from wand.image import Image as wimage
 
+from typing import Union
 import os.path
 from math import ceil, isclose
 import time
+from io import BytesIO
 
 
 """TODO:
@@ -413,17 +414,18 @@ class Printer():
 
 
         def __init__(self,
-                     image : str,   # or may be ByteIO
+                     image : Union[str, BytesIO],
                      resolution : Resolution = DD_8,
                      desired_width_ratio = 1,
                      modify_contrast = None,
                      modify_brightness = None,
-                     export_generated_image = False):
+                     export_generated_image = False,
+                     name = None):
             desired_width = int(resolution.max_hor_dots * desired_width_ratio)
             if isinstance(image, str):
                 self.name = image
             else:
-                self.name = type(image)
+                self.name = name or str(type(image))
             print (f"Image: Opening '{self.name}'")
 
             img = PIL.Image.open(image) # open colour image
@@ -441,24 +443,27 @@ class Printer():
                 print (f"Applying image correction: brightness: {modify_brightness}")
                 img = PIL.ImageEnhance.Brightness(img).enhance(modify_brightness)
 
-            orig_dpi = img.info['dpi']
-            orig_dpi_ratio = orig_dpi[0] / orig_dpi[1]
-            print (f"Image original density ratio {orig_dpi[0]}X / {orig_dpi[1]}Y: {orig_dpi_ratio}")
-            # higher number for higher stretching
-            desired_dpi_ratio = resolution.hor_dpi / resolution.vert_dpi
-            print (f"Printer density ratio {resolution.hor_dpi}X / {resolution.vert_dpi}Y: {desired_dpi_ratio}")
-            height_stretch_ratio =  orig_dpi_ratio / desired_dpi_ratio
-            print (f"Stretching factor: {height_stretch_ratio}")
+            height_stretch_ratio = 1
+            if not hasattr(img.info, 'dpi'):
+                print ("Warn: Image has no resolution information. Printing unmodified!")
+            else:
+                orig_dpi = img.info['dpi']
+                orig_dpi_ratio = orig_dpi[0] / orig_dpi[1]
+                print (f"Image original density ratio {orig_dpi[0]}X / {orig_dpi[1]}Y: {orig_dpi_ratio}")
+                # higher number for higher stretching
+                desired_dpi_ratio = resolution.hor_dpi / resolution.vert_dpi
+                print (f"Printer density ratio {resolution.hor_dpi}X / {resolution.vert_dpi}Y: {desired_dpi_ratio}")
+                height_stretch_ratio =  orig_dpi_ratio / desired_dpi_ratio
+                print (f"Stretching factor: {height_stretch_ratio}")
 
             wpercent = (desired_width / float(img.size[0]))
             hsize = int(img.size[1] * wpercent / height_stretch_ratio)
             scaled_size = (desired_width, hsize)
-            print (f"Image  : {orig_dpi}")
             print (f"Desired: {resolution}")
             if not isclose(scaled_size[0], img.size[0]) or not isclose(scaled_size[1], img.size[1]):
                 print (f"Image: Scaling from {img.size} to {scaled_size}")
                 img = img.resize(scaled_size, PIL.Image.Resampling.LANCZOS)
-            if len(img.getcolors()) > 2:
+            if not img.getcolors() or len(img.getcolors()) > 2:
                 img = img.convert('1') # convert image to black and white
             if export_generated_image:
                 img.save(f'intended_image_{os.path.basename(image)}.png',
