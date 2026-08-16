@@ -448,7 +448,7 @@ class Printer():
 
             height_stretch_ratio = 1
             if not hasattr(img.info, 'dpi') and not img.info.get('dpi'):
-                print ("Warn: Image has no resolution information. Printing unmodified!")
+                print ("Warn: Image has no density (dpi) information. Printing unmodified!")
             else:
                 orig_dpi = img.info['dpi']
                 orig_dpi_ratio = orig_dpi[0] / orig_dpi[1]

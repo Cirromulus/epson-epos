@@ -4,6 +4,7 @@ from datetime import datetime
 import argparse
 from sys import stdin
 from wand.image import Image as wimage
+from wand.color import Color as wcolor
 from io import BytesIO
 from os import path, environ
 
@@ -93,12 +94,21 @@ def printImage():
                         resolution=(densities[args.density].hor_dpi, densities[args.density].vert_dpi),
                         ) as img:
                 for i, page in enumerate(img.sequence):
+                    # complete black background can be a bug...
+                    # TODO Perhaps add switch to not override background color
+                    page.background_color = wcolor('white')
+                    page.alpha_channel = 'remove'   # not supported anyway
+
                     page_rendered = wimage(page).make_blob(format="png")
 
+                    ## To view intermediate render:
                     # with open("page.png", "wb") as f:
                     #     f.write(BytesIO(page_rendered).getbuffer())
+
+                    re_import = PIL.Image.open(BytesIO(page_rendered))
+                    re_import.info['dpi'] = page.resolution # wand image "resolution" is actually density
                     
-                    images.append(Printer.Image(BytesIO(page_rendered),
+                    images.append(Printer.Image(re_import,
                                 resolution=densities[args.density],
                                 modify_contrast=args.contrast,
                                 modify_brightness=args.brightness,
