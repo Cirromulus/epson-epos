@@ -54,9 +54,9 @@ def printImage():
                         action='store_true',
                         )
 
-    parser.add_argument('--workaround-24-bug',
+    parser.add_argument('--no-workaround-24-bug',
                         help="Sometimes, in 24 bit mode, image transmission gets corrupted and it gets only filled into page mode without printing the buffer. I really don't know how this happens. It seems that if sometimes, some of the triplet bytes, is between 4 and 6, thransmission errors happen. Or something. Perhaps it is a Page-Mode bug? Without page mode, we have tiny gaps between columns. I am just glad that all tested images work with that workaround, and it is not a huge impact on quality. Don't hate me, I am just a program",
-                        default=True,
+                        action='store_true'
                         )
 
     parser.add_argument('--extra-text',
@@ -70,8 +70,9 @@ def printImage():
 
     args = parser.parse_args()
 
-    if args.workaround_24_bug and "24" not in args.density:
-        parser.error(f"Ugly workaround only applies to 24 bit transmissions. You have chosen {args.density}.")
+    actually_workaround_24_bug = "24" in args.density
+    if not args.no_workaround_24_bug:
+        actually_workaround_24_bug = False
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -113,7 +114,7 @@ def printImage():
             p.feed()
 
         for img in images:
-            p.printImage(img, ugly_workaround=args.workaround_24_bug)
+            p.printImage(img, ugly_workaround=actually_workaround_24_bug)
         if args.extra_text:
             for line in args.extra_text:
                 p.println(Just.CENTER, line)

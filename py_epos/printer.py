@@ -436,6 +436,7 @@ class Printer():
                 print (f"Image has transparency. Replacing that with white.")
                 white_bg = PIL.Image.new("RGBA", img.size, "WHITE") # Create a white rgba background
                 white_bg.paste(img, (0, 0), img)
+                white_bg.info = img.info
                 img = white_bg
 
             if modify_contrast:
@@ -446,7 +447,7 @@ class Printer():
                 img = PIL.ImageEnhance.Brightness(img).enhance(modify_brightness)
 
             height_stretch_ratio = 1
-            if not hasattr(img.info, 'dpi'):
+            if not hasattr(img.info, 'dpi') and not img.info.get('dpi'):
                 print ("Warn: Image has no resolution information. Printing unmodified!")
             else:
                 orig_dpi = img.info['dpi']
@@ -455,7 +456,7 @@ class Printer():
                 # higher number for higher stretching
                 desired_dpi_ratio = resolution.hor_dpi / resolution.vert_dpi
                 print (f"Printer density ratio {resolution.hor_dpi}X / {resolution.vert_dpi}Y: {desired_dpi_ratio}")
-                height_stretch_ratio =  orig_dpi_ratio / desired_dpi_ratio
+                height_stretch_ratio =  desired_dpi_ratio / orig_dpi_ratio
                 print (f"Stretching factor: {height_stretch_ratio}")
 
             wpercent = (desired_width / float(img.size[0]))
