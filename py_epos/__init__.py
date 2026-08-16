@@ -5,7 +5,7 @@ import argparse
 from sys import stdin
 from wand.image import Image as wimage
 from io import BytesIO
-from os import path
+from os import path, environ
 
 densities = {
     'sd8' : Printer.Image.SD_8,
@@ -15,7 +15,15 @@ densities = {
 }
 
 def addDefaultArguments(parser: argparse.ArgumentParser):
-    parser.add_argument("ip", help="IP address", type=str)
+    default_ip_addr = environ.get('EPOS_IP')
+    setting = {}
+    parser.add_argument("ip",
+                        help=f"IP address (default value read from $EPOS_IP in environment)",
+                        type=str,
+                        default=default_ip_addr,
+                        # Is it weird that the ENV variable makes this positional argument optional?
+                        nargs='?' if default_ip_addr else None)
+
     parser.add_argument("port", help="EPOS TCP/IP Port", type=int, default=9100, nargs='?')
 
     parser.add_argument('--density',
@@ -43,7 +51,8 @@ def addDefaultArguments(parser: argparse.ArgumentParser):
 def printImage():
     parser = argparse.ArgumentParser(
             prog="eposprint",
-            description="Sends Images in different formats to Epson EPOS printers through TCP")
+            description="Sends Images in different formats to Epson EPOS printers through TCP",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     addDefaultArguments(parser)
 
@@ -124,7 +133,8 @@ def printImage():
 def interactiveText():
     parser = argparse.ArgumentParser(
             prog="epostext",
-            description="\"Typesets\" text to Epson EPOS printers through TCP")
+            description="\"Typesets\" text to Epson EPOS printers through TCP",
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
     addDefaultArguments(parser)
 
