@@ -118,6 +118,10 @@ def printImage():
             if args.auto_rotate and image.size[0] > image.size[1]:
                 print ("Image is landscape, auto-rotating for portrait")
                 image = image.rotate(90, expand=True)
+            if not image.info.get('dpi'):
+                print (f"Warn: Image '{imagepath}' did not provide DPI information.")
+                print ( "      Assuming square pixels!")
+                image.info['dpi'] = (1, 1)
             images.append(Printer.Image(image,
                                 resolution=densities[args.density],
                                 modify_contrast=args.contrast,
